@@ -44,6 +44,8 @@ export GEMINI_API_KEY="你的密钥"
 
 ## 部署到 Cloud Run
 
+> 部署前置条件（账号、需启用的 API、IAM 角色、区域选择、成本预期）逐项清单见 **[deploy/PREREQUISITES.md](deploy/PREREQUISITES.md)**。
+
 ```bash
 PROJECT_ID=你的项目ID
 REGION=asia-east1
@@ -117,7 +119,9 @@ curl -s -X POST http://127.0.0.1:8080/api/analyze \
 ├── data/sample_metrics.json      脱敏示例数据
 ├── tests/test_analyzer.py        单元测试
 ├── scripts/run_local.sh          本地一键启动
-├── deploy/service.yaml           Cloud Run 服务定义
+├── deploy/
+│   ├── PREREQUISITES.md          部署前置条件清单
+│   └── service.yaml              Cloud Run 服务定义
 └── docs/
     ├── architecture.md           架构与完整计算口径
     └── demo-script.md            3 分钟演示视频分镜
