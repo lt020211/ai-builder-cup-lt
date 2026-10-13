@@ -1,0 +1,104 @@
+# ============================================================
+# 凭据 / 密钥 —— 绝对不要提交（本仓库是 Public，泄露即永久曝光）
+# ============================================================
+.env
+.env.*
+*.env
+*.pem
+*.key
+*.p12
+*.pfx
+id_rsa*
+id_ed25519*
+credentials*.json
+*_credentials.json
+credential*.json
+service-account*.json
+service_account*.json
+*serviceaccount*.json
+gcloud-key*.json
+application_default_credentials.json
+config/object_storage.json
+config/*secret*
+config/*credential*
+*.tfvars
+*.tfstate
+*.tfstate.*
+secrets.yaml
+secrets.yml
+
+# ============================================================
+# 云厂商 CLI 状态（可能含 token）
+# ============================================================
+.gcloud/
+.aws/
+.azure/
+.coscli/
+
+# ============================================================
+# Python
+# ============================================================
+__pycache__/
+*.py[cod]
+*.so
+.venv/
+venv/
+env/
+.python-version
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# ============================================================
+# Node / 前端
+# ============================================================
+node_modules/
+dist/
+build/
+.next/
+.nuxt/
+.cache/
+npm-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# ============================================================
+# 数据集 / 大文件（仓库有体积限制，别把数据推上去）
+# ============================================================
+data/
+datasets/
+datasets_local/
+*.ckpt
+*.pt
+*.pth
+*.safetensors
+*.onnx
+*.h5
+*.bin
+*.parquet
+*.zip
+*.tar
+*.tar.gz
+*.tgz
+
+# ============================================================
+# 编辑器 / 系统
+# ============================================================
+.vscode/
+.idea/
+*.swp
+.DS_Store
+Thumbs.db
+
+# ============================================================
+# 日志 / 临时
+# ============================================================
+*.log
+logs/
+tmp/
+temp/
+*.tmp
+nohup.out
