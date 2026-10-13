@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>GPU 算力浪费审计器</title>
+<style>
+:root{--bg:#f6f5f2;--card:#fff;--line:#e3e1da;--text:#2c2c2a;--muted:#6b6a65;--accent:#185fa5;--warn:#a32d2d;--mid:#854f0b}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font:14px/1.6 -apple-system,"PingFang SC","Helvetica Neue",Arial,sans-serif}
+.wrap{max-width:1080px;margin:0 auto;padding:28px 20px 64px}
+h1{font-size:20px;font-weight:500;margin:0 0 6px}
+.sub{color:var(--muted);font-size:13px;margin-bottom:22px}
+.bar{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:20px}
+button{font:inherit;padding:9px 18px;border:1px solid var(--accent);background:var(--accent);color:#fff;border-radius:8px;cursor:pointer}
+button:disabled{opacity:.5;cursor:default}
+.cards{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:18px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px 16px}
+.card .k{color:var(--muted);font-size:12px;margin-bottom:6px}
+.card .v{font-size:22px;font-weight:500}
+.card .u{font-size:12px;color:var(--muted);font-weight:400;margin-left:3px}
+.warn{color:var(--warn)}
+section{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:18px 20px;margin-bottom:16px}
+section h2{font-size:15px;font-weight:500;margin:0 0 12px}
+pre.ai{white-space:pre-wrap;font:13px/1.75 inherit;margin:0}
+table{width:100%;border-collapse:collapse;font-size:13px}
+th,td{text-align:left;padding:8px 10px;border-bottom:1px solid var(--line);white-space:nowrap}
+th{color:var(--muted);font-weight:400;font-size:12px}
+td.num{text-align:right;font-variant-numeric:tabular-nums}
+.tag{display:inline-block;padding:1px 8px;border-radius:99px;font-size:11px;border:1px solid var(--line);color:var(--muted)}
+.tag.high{color:var(--warn);border-color:var(--warn)}
+.tag.medium{color:var(--mid);border-color:var(--mid)}
+.hint{color:var(--muted);font-size:12px}
+@media(max-width:760px){.cards{grid-template-columns:repeat(2,1fr)}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>GPU 算力浪费审计器</h1>
+  <div class="sub">把集群的「预留」与「实际用量」差异，变成可执行的能效优化动作 &nbsp;|&nbsp; Google Cloud AI Builder Cup 2026</div>
+  <div class="bar">
+    <button id="run">加载示例数据并分析</button>
+    <span class="hint" id="status">点击开始</span>
+  </div>
+
+  <div id="result" style="display:none">
+    <div class="cards" id="cards"></div>
+    <section>
+      <h2>AI 诊断 <span class="hint" id="aimode"></span></h2>
+      <pre class="ai" id="aitext"></pre>
+    </section>
+    <section>
+      <h2>浪费明细（按金额降序）</h2>
+      <div style="overflow-x:auto"><table id="tbl"></table></div>
+    </section>
+  </div>
+
+  <section>
+    <h2>口径说明</h2>
+    <div class="hint">
+      浪费卡时 = 申请未用卡时 + 低效折算卡时（利用率低于 30% 时按 <code>使用卡数 × 时长 × (1 − 利用率)</code> 折算）；
+      电耗按 单卡 TDP × 0.25（空转功率系数）折算；电费 ¥0.70/kWh；
+      碳排因子 0.581 kgCO₂e/kWh（全国电网平均）。完整假设见仓库 <code>docs/architecture.md</code>。
+    </div>
+  </section>
+</div>
+<script>
+const $ = (s) => document.querySelector(s);
+const fmt = (n, d = 0) => Number(n).toLocaleString('zh-CN', { maximumFractionDigits: d });
+const money = (n) => '¥' + fmt(n, 0);
+
+$('#run').addEventListener('click', async () => {
+  const btn = $('#run');
+  btn.disabled = true;
+  $('#status').textContent = '分析中…';
+  try {
+    const res = await fetch('/api/analyze', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({})
+    });
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    render(await res.json());
+    $('#status').textContent = '完成';
+  } catch (err) {
+    $('#status').textContent = '失败：' + err.message;
+  } finally {
+    btn.disabled = false;
+  }
+});
+
+function render(data) {
+  const s = data.summary;
+  const cards = [
+    ['浪费卡时', fmt(s.total_waste_card_hours), '卡时'],
+    ['浪费电费', money(s.total_waste_cost_cny), ''],
+    ['浪费电耗', fmt(s.total_waste_energy_kwh), 'kWh'],
+    ['碳排当量', fmt(s.total_waste_carbon_kg), 'kgCO₂e']
+  ];
+  $('#cards').innerHTML = cards.map(([k, v, u]) =>
+    `<div class="card"><div class="k">${k}</div><div class="v warn">${v}<span class="u">${u}</span></div></div>`
+  ).join('');
+
+  const rows = data.records.slice().sort((a, b) => b.waste_cost_cny - a.waste_cost_cny);
+  const head = ['云', '节点', '卡型', '申请', '使用', '时长(h)', '利用率(%)', '浪费卡时', '浪费金额', '模式', '等级'];
+  const body = rows.map((r) => `<tr>
+    <td>${r.cloud}</td>
+    <td>${r.node}</td>
+    <td>${r.gpu_type}</td>
+    <td class="num">${r.requested_cards}</td>
+    <td class="num">${r.used_cards}</td>
+    <td class="num">${fmt(r.hours)}</td>
+    <td class="num">${fmt(r.avg_util_pct, 1)}</td>
+    <td class="num">${fmt(r.waste_card_hours)}</td>
+    <td class="num">${money(r.waste_cost_cny)}</td>
+    <td>${r.pattern_label}</td>
+    <td><span class="tag ${r.severity}">${r.severity}</span></td>
+  </tr>`).join('');
+  $('#tbl').innerHTML = `<thead><tr>${head.map((h) => `<th>${h}</th>`).join('')}</tr></thead><tbody>${body}</tbody>`;
+
+  const ai = data.ai || {};
+  $('#aimode').textContent = ai.mode === 'gemini'
+    ? `由 ${ai.model} 生成`
+    : (ai.mode === 'fallback' ? '（模型调用失败，已降级为离线模板）' : '（离线模板，未配置 GEMINI_API_KEY）');
+  $('#aitext').textContent = ai.text || '';
+  $('#result').style.display = 'block';
+}
+</script>
+</body>
+</html>
