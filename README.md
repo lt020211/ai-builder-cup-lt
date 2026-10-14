@@ -58,12 +58,19 @@ export GEMINI_API_KEY="你的密钥"
 
 ## 部署到 Cloud Run
 
-> ⚠️ **本项目必须使用标准 Cloud 项目并启用结算（Billing），没有零账单的绕行路径。**
-> 官方 Cloud Run 快速入门明确要求项目已启用结算；而「Cloud Starter Tier 免绑卡」仅适用于
-> 在 Google AI Studio **Build 模式**里由 agent 生成的应用（React + Node），**不支持部署自带 Dockerfile 的仓库**。
-> 核实过程与依据见 **[deploy/PREREQUISITES.md](deploy/PREREQUISITES.md)**。
+> ⚠️ **两条部署路径，按账号情况二选一。**
+>
+> - **路径 A（标准项目 + 结算）**——最直接：建一个 GCP 项目、启用结算，然后一条命令部署。
+>   前提是账号已能绑定结算账号。
+> - **路径 B（Cloud Starter Tier）**——**免绑卡、免建项目**的零成本路径。官方原文：
+>   *"Lets eligible accounts publish up to 2 full-stack applications without setting up a Google Cloud
+>   project or billing account."* 代价是它只接受在 AI Studio **Build 模式**里由 agent 生成的应用
+>   （React + Node），**不能直接部署本仓库的 Python / Flask 代码**。
+>
+> 两条路的完整依据、Starter Tier 的资格条件、区域锁定规则与最短可行步骤，
+> 见 **[deploy/PREREQUISITES.md](deploy/PREREQUISITES.md)**。
 
-### 方式一：一条命令（推荐）
+### 路径 A：一条命令
 
 ```bash
 gcloud auth login                      # 浏览器交互
@@ -76,7 +83,7 @@ gcloud auth login                      # 浏览器交互
 > 未配置密钥也能部署，但页面上的「AI 工具调用轨迹」会显示"离线模式未调用工具"——
 > 这会丢掉本项目最主要的差异化展示。建议先配密钥（见 `deploy/PREREQUISITES.md` 第 3 步）。
 
-### 方式二：手动分步
+### 路径 A'：手动分步
 
 ```bash
 PROJECT_ID=你的项目ID
