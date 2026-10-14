@@ -5,6 +5,20 @@
 
 **语言：** [🇬🇧 English](README.en.md) ｜ 🇨🇳 中文
 
+## 🟢 线上演示（已部署，可直接点开）
+
+**<https://gpu-waste-auditor-2026.web.app>** ｜ 备用域名 <https://gpu-waste-auditor-2026.firebaseapp.com>
+
+点「加载示例数据并分析」即可。这是**纯静态站点**：没有后端服务，审计计算在浏览器内完成，
+Gemini 通过 **Firebase AI Logic** 直连调用（模型自主决定调用哪些工具）。
+
+实测一次完整分析约 **9 秒**，模型自主发起 **11 次工具调用**，无任何后端参与。
+即使模型不可用，页面也会自动降级为离线规则模板，功能完整可演示。
+
+> 免费层配额有限（每个模型 20 次/天），所以实现了模型降级链——
+> 首选 `gemini-3.5-flash-lite`（单回合约 1.5s），配额用尽后依次切到备用模型，
+> 界面会如实显示「为什么换了模型」。
+
 ## 一句话方案
 
 **把多云 GPU 集群「预留了卡却没在用」的隐性浪费，算成电费与碳排，再让 Gemini 自主调用工具取数、给出可排期可决策的优化动作——并回答「什么时候跑最省碳」。**
@@ -56,7 +70,43 @@ cp .env.example .env      # 填入 GEMINI_API_KEY
 export GEMINI_API_KEY="你的密钥"
 ```
 
-## 部署到 Cloud Run
+## 部署到 Firebase（线上演示用的就是这条路径）
+
+这套代码有**两份等价实现**，选择哪份取决于部署形态：
+
+| | 浏览器端 JS（线上） | Python / Flask（本地与 Cloud Run） |
+|---|---|---|
+| 位置 | `firebase/public/` | `src/` |
+| 计算 | 浏览器内 | 服务端 |
+| Gemini 调用 | Firebase AI Logic 直连 | 服务端 HTTP |
+| 部署 | Firebase Hosting（**免结算账号、免绑卡**） | Cloud Run（需结算账号） |
+| 用途 | 线上可点开的演示 | 参考实现、单元测试、可复算 |
+
+两份实现**算法与常量为逐行一致**，并用差分测试守住：同一份输入分别跑两份实现、逐字段比对。
+详见下方「移植保真度」一节。
+
+```bash
+# 发布（纯 REST，不需要 firebase CLI，也不需要交互式登录）
+python3 scripts/fb_deploy.py firebase/public
+```
+
+> 为什么不用 `firebase deploy`：本机没装 CLI，且 CLI 需要一次交互式 OAuth；
+> 而 gcloud 已登录，直接用它的 access token 打 Hosting REST 接口更省事。
+> 脚本内联注释记录了三个踩过的坑（gzip 后取哈希、不能带 `Content-Encoding`、
+> 固定 `mtime=0` 保证压缩结果可复现）。
+
+### 移植保真度
+
+不是靠人工核对，而是**差分测试**：
+
+```bash
+python3 scripts/diff_port.py            # 逐字段比对 Python 与 JS 的输出
+```
+
+覆盖 `analyze_batch` 全量输出、17 次工具调用（含越界、类型错误、未知工具等边界用例）、
+离线诊断文本。任一字段不一致都会打印出具体路径。
+
+## 部署到 Cloud Run（备选）
 
 > ⚠️ **两条部署路径，按账号情况二选一。**
 >
@@ -104,26 +154,32 @@ gcloud run services replace deploy/service.yaml --region=$REGION
 
 ## 工作原理
 
+线上形态（纯静态，无后端）：
+
 ```
-监控数据 → analyzer.py（确定性计算）→ 结构化审计结果
-                                          ↓
-                                  ai.py（Gemini 工具调用循环）
-                                    ↕  query_metrics / estimate_carbon
-                                    ↕  simulate_defer / propose_action
-                                          ↓
-                             Flask Web（Cloud Run）→ 指标卡 + 碳曲线 + 工具轨迹 + 决策清单
+监控数据 → analyzer.js（确定性计算）→ 结构化审计结果
+                                        ↓
+                                ai.js（Gemini 工具调用循环）
+                                  ↕  query_metrics / estimate_carbon
+                                  ↕  simulate_defer / propose_action
+                                  ↑  Firebase AI Logic（浏览器直连）
+                                        ↓
+                Firebase Hosting → 指标卡 + 碳曲线 + 工具轨迹 + 决策清单
 ```
+
+本地 / Cloud Run 形态（Python 参考实现）与此一一对应，只是把上图的 `.js` 换成 `.py`、
+把「浏览器直连 AI Logic」换成「Flask 服务端调用 Gemini」，输出完全一致（由差分测试保证）。
 
 **设计取舍**：所有数字由确定性代码算出，AI 只做「取数—推理—登记建议」。好处是数字可复算、可审计，
-不会出现「AI 编了个数」；同时没有密钥也能降级演示。
+不会出现「AI 编了个数」；同时模型不可用时也能降级演示。
 
-**AI 工具调用循环**（`ai.py::_agentic_diagnose`）：
+**AI 工具调用循环**（`ai.py::_agentic_diagnose` / `ai.js::agenticDiagnose`）：
 
 ```
 模型 → 返回 functionCall → 本地执行工具 → 把结果回灌 → 模型 → … → 最终文本
 ```
 
-最多 8 轮（`MAX_TOOL_TURNS`），一旦模型产出文本即结束。四个工具：
+最多 6 轮（`MAX_TOOL_TURNS`），一旦模型产出文本即结束。四个工具：
 
 | 工具 | 作用 |
 |---|---|
@@ -131,6 +187,29 @@ gcloud run services replace deploy/service.yaml --region=$REGION
 | `estimate_carbon` | 给定电耗与时段，返回碳排与当日最优时段 |
 | `simulate_defer` | 把某节点负载从当前时段挪到低碳时段，测算减碳量与比例 |
 | `propose_action` | 登记一条可执行建议，前端据此渲染「接受 / 拒绝」 |
+
+### 浏览器端实现的两个坑（都写进了代码注释）
+
+**1. AI Logic 的官方 JS SDK 用不了。** SDK 的 `ChatSession` 把工具结果回传的角色写死为
+`role: "function"`，而新版模型已不接受这个角色：
+
+```
+400 Role 'function' is not supported. Please use a valid role:
+    SYSTEM, USER, ASSISTANT, DEVELOPER, CONTEXT, ... MODEL
+```
+
+改用 `role: "user"` 回传本来是对的，却又被 SDK 的客户端校验拦住
+（`Content with role 'user' can't contain 'functionResponse' part`）。
+两条路都堵死 —— 所以 `ai.js` 直接打 REST，自己控制 `contents` 的角色。
+顺带去掉了 150KB 的 SDK 依赖。
+
+**2. 鉴权只能用 header `x-goog-api-key`。** 用查询参数 `?key=` 会被边缘直接返回
+HTML 400，看起来像「模型不存在」，极易误判成模型下线。已被这个假象误导过一次。
+
+**模型降级链**：免费层每个模型的日配额独立且有限，所以按
+`gemini-3.5-flash-lite → gemini-3.5-flash → gemini-3.1-flash-lite → gemini-3.8-flash`
+依次尝试。区分两种 429：短时限流就等一下重试同一个模型；当日配额耗尽（响应里会写
+`retry in 18h44m`）则立刻换模型——否则界面会挂十几个小时。换模型的原因会如实显示在界面上。
 
 **核心口径**（完整假设见 [docs/architecture.md](docs/architecture.md)）：
 
@@ -205,7 +284,20 @@ curl -s -X POST http://127.0.0.1:8080/api/analyze \
 │   ├── test_carbon.py            碳强度模型测试
 │   ├── test_tools.py             工具与分发测试
 │   └── test_ai.py                AI 层与离线降级测试
+├── firebase/public/              ★ 线上部署的纯静态站点
+│   ├── index.html                页面骨架（指标卡 / 碳曲线 / 工具轨迹 / 决策清单）
+│   ├── styles.css
+│   ├── js/analyzer.js            浪费识别与折算
+│   ├── js/carbon.js              电网碳强度时段模型
+│   ├── js/tools.js               四个工具 + 分发
+│   ├── js/ai.js                  AI Logic 工具调用循环与离线降级
+│   ├── js/prompt.js              诊断提示词模板
+│   ├── js/app.js                 界面装配
+│   └── data/sample.json          浏览器侧读取的示例数据
 ├── scripts/run_local.sh          本地一键启动
+├── scripts/fb_deploy.py          发布静态站点到 Firebase Hosting（纯 REST）
+├── scripts/diff_port.py          差分测试：Python 参考实现 vs JS 移植版
+├── scripts/probe_*.py            摸清 AI Logic 行为的一次性探针脚本
 ├── deploy/
 │   ├── deploy.sh                 部署到 Cloud Run 的一键幂等脚本
 │   ├── PREREQUISITES.md          部署前置条件清单
@@ -236,13 +328,21 @@ curl -s -X POST http://127.0.0.1:8080/api/analyze \
 5. **碳感知调度假设负载可平移**：对训练任务而言，只有具备 checkpoint 续训能力的任务才真正可延后；
    本项目把「可延后性」作为待补数据列出，没有擅自假设所有任务都能挪时段。
 6. 卡时单价为估算值，需按实际采购/租赁台账校准。
-7. **Gemini 免费层配额很紧，且模型名会下线**（2026-10-14 实测）：
-   - 配额为 **5 请求/分钟/项目/模型**（`GenerateRequestsPerMinutePerProjectPerModel-FreeTier`）。
-     一次分析本身就要多个回合，因此 `ai.py` 内建了 429 退避重试，提示词也要求模型在单回合内并行调用工具。
-   - `gemini-2.5-flash` 已**对新用户下线**（返回 404），当前默认模型为 `gemini-3.8-flash`。
-     若日后再次报 404，用 `curl "https://generativelanguage.googleapis.com/v1beta/models?key=$KEY"` 列一遍再改
-     `GEMINI_MODEL` 即可，改环境变量不需要动代码。
-   - 演示时避免连点「分析」按钮；单次分析已在配额内，但连续多次会触发限流（表现为前端等待时间变长，随后仍会正常给出结果）。
+7. **免费层配额是演示期最硬的约束**（2026-10-14 实测，非估算）：
+   - 每个模型有**独立的日配额**，且很小 —— `gemini-3.8-flash` 实测为 **20 次/天/项目**，
+     耗尽后返回 `429 ... retry in 18h44m`（按太平洋时间零点重置）。此外还有每分钟请求数限制。
+   - 因此实现了**模型降级链**：`gemini-3.5-flash-lite → gemini-3.5-flash → gemini-3.1-flash-lite
+     → gemini-3.8-flash`。代码区分两种 429 —— 短时限流就等一下重试同一个模型；
+     当日配额耗尽则**立刻换模型**（否则界面会挂十几个小时）。换模型的原因会如实显示在界面上。
+   - 实测一次完整分析（11 次工具调用）约 9 秒；单个模型当日约可支撑 40+ 次演示。
+8. **前端持有 Firebase Web API Key（这是 Firebase 的既有设计，非疏漏）**：
+   该 Key 本就公开出现在任何 Firebase 网页的源码里，真正的保护是安全规则与 App Check。
+   当前 **App Check 尚未强制**（Firebase 计划 2026-11-02 起对 AI Logic 强制），
+   也就是说现阶段他人在理论上可以复用该配额。届时通过请求头附加 App Check token 即可闭合，
+   业务逻辑无需改动。这是已识别、有明确收敛动作的边界。
+9. **AI Logic 的官方 JS SDK 未被采用**，原因是它在工具调用的多回合场景下有硬缺陷
+   （角色写死为 `function`，且客户端校验阻止改用 `user`）。详见「工作原理」一节。
+   代价是需自行处理鉴权与超时，收益是能与 Python 参考实现保持 1:1 并去掉 150KB 依赖。
 
 以上限制在技术评审环节会被问到，本文档直接列为已知边界而非回避。
 

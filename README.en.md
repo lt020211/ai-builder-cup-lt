@@ -5,6 +5,22 @@
 
 **Language:** 🇬🇧 English ｜ [🇨🇳 中文](README.md)
 
+## 🟢 Live demo (deployed, one click)
+
+**<https://gpu-waste-auditor-2026.web.app>** ｜ mirror: <https://gpu-waste-auditor-2026.firebaseapp.com>
+
+Click "加载示例数据并分析" (load sample data and analyse). This is a **purely static site** — there is no
+backend service. The audit maths runs in the browser, and Gemini is called directly through
+**Firebase AI Logic** (the model decides which tools to call).
+
+A full analysis takes about **9 seconds**, during which the model issues **11 tool calls** — with no
+backend involved. If the model is unavailable the page falls back to an offline rule-based template,
+so the demo always works.
+
+> Free-tier quotas are limited (20 requests/day per model), so the app implements a **model fallback
+> chain**: it starts with `gemini-3.5-flash-lite` (~1.5 s per turn) and moves to the next model when a
+> quota runs out, showing the reason for the switch in the UI.
+
 ## One-line pitch
 
 **We turn the hidden waste of "reserved but idle" GPUs across multi-cloud clusters into electricity cost and carbon emissions — then let Gemini call tools to fetch its own data and produce schedulable, actionable decisions, including the answer to *when* to run for the lowest carbon.**
@@ -52,7 +68,39 @@ cp .env.example .env      # then fill in GEMINI_API_KEY
 export GEMINI_API_KEY="your-key"
 ```
 
-## Deploy to Cloud Run
+## Deploy to Firebase (this is what the live demo uses)
+
+There are **two equivalent implementations**; which one you use depends on the deployment shape:
+
+| | Browser-side JS (live) | Python / Flask (local & Cloud Run) |
+|---|---|---|
+| Location | `firebase/public/` | `src/` |
+| Computation | in the browser | on the server |
+| Gemini call | Firebase AI Logic, direct | server-side HTTP |
+| Deploy | Firebase Hosting (**no billing account, no credit card**) | Cloud Run (billing account required) |
+| Purpose | the clickable online demo | reference implementation, unit tests, recomputable |
+
+The two implementations are **line-for-line equivalent** in algorithms and constants, and a
+differential test keeps them that way — see below.
+
+```bash
+# Publish (plain REST; no firebase CLI and no interactive OAuth needed)
+python3 scripts/fb_deploy.py firebase/public
+```
+
+### Port fidelity
+
+Not verified by eyeballing the code, but by a **differential test**: the same input is fed to both
+implementations and every field is compared.
+
+```bash
+python3 scripts/diff_port.py
+```
+
+It covers the full `analyze_batch` output, 17 tool calls (including out-of-range limits, wrong types
+and unknown tool names), and the offline diagnosis text. Any mismatch prints the exact field path.
+
+## Deploy to Cloud Run (alternative)
 
 > ⚠️ **Two deployment routes — pick whichever your account supports.**
 >
@@ -208,7 +256,20 @@ curl -s -X POST http://127.0.0.1:8080/api/analyze \
 │   ├── test_carbon.py            Carbon-intensity model tests
 │   ├── test_tools.py             Tool and dispatcher tests
 │   └── test_ai.py                AI layer and offline-fallback tests
+├── firebase/public/              >>> The live, deployed static site <<<
+│   ├── index.html                Shell page (metric cards / carbon curve / tool trace / decision list)
+│   ├── styles.css
+│   ├── js/analyzer.js            Waste detection and conversion
+│   ├── js/carbon.js              Hourly grid carbon-intensity model
+│   ├── js/tools.js               The four tools + dispatcher
+│   ├── js/ai.js                  Gemini tool-calling loop over Firebase AI Logic + offline fallback
+│   ├── js/prompt.js              Diagnosis prompt template
+│   ├── js/app.js                 UI wiring
+│   └── data/sample.json          Sample data served to the browser
 ├── scripts/run_local.sh          One-command local launcher
+├── scripts/fb_deploy.py          Publish the static site to Firebase Hosting (plain REST)
+├── scripts/diff_port.py          Differential test: Python reference vs JS port
+├── scripts/probe_*.py            One-off probes that established the AI Logic behaviour
 ├── deploy/
 │   ├── deploy.sh                 One-command idempotent Cloud Run deploy script
 │   ├── PREREQUISITES.md          Deployment prerequisites checklist
