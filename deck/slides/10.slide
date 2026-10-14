@@ -1,0 +1,66 @@
+// 10 · 证据链本身就是产品 —— 结论条 + 全宽工具轨迹 + 双栏说明
+const FONT = 'Inter, "Helvetica Neue", Arial, sans-serif';
+const MONO = '"JetBrains Mono", "SF Mono", Menlo, monospace';
+const INK = '#0B1220';
+const BLUE = '#2F6BFF';
+const RED = '#E5484D';
+const DIM = '#64748B';
+const BODY = '#1A2434';
+
+<Slide style={{ width: 1280, height: 720, padding: '18px 72px', background: '#FFFFFF', fontFamily: FONT }}>
+    <Box style={{ width: 1136, height: 92, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end' }}>
+        <Text style={{ fontSize: 34, fontWeight: 700, color: INK, lineHeight: 1.3 }}>Where every number on this page comes from</Text>
+        <Text style={{ fontFamily: MONO, fontSize: 14, color: DIM, lineHeight: 1.45 }}>case-xid94-rising · single triage</Text>
+    </Box>
+
+    <Box style={{ width: 1136, height: 544 }}>
+
+        <Box style={{ width: 1136, height: 104, flexDirection: 'row', alignItems: 'center', gap: 24 }}>
+            <Box style={{ paddingTop: 8, paddingBottom: 8, paddingLeft: 16, paddingRight: 16, borderRadius: 6, background: INK }}>
+                <Text style={{ fontFamily: MONO, fontSize: 18, fontWeight: 600, color: '#FFFFFF' }}>hardware</Text>
+            </Box>
+            <Box style={{ paddingTop: 8, paddingBottom: 8, paddingLeft: 16, paddingRight: 16, borderRadius: 6, background: RED }}>
+                <Text style={{ fontFamily: MONO, fontSize: 18, fontWeight: 600, color: '#FFFFFF' }}>RMA filed</Text>
+            </Box>
+            <Text style={{ fontFamily: MONO, fontSize: 72, fontWeight: 700, color: INK, lineHeight: 1 }}>0.95</Text>
+            <Box>
+                <Text style={{ fontSize: 15, color: DIM, lineHeight: 1.4 }}>model confidence</Text>
+                <Text style={{ fontSize: 15, color: DIM, lineHeight: 1.4 }}>4 tool calls before it was allowed to answer</Text>
+            </Box>
+            <Box style={{ flex: 1 }} />
+            <Text style={{ fontFamily: MONO, fontSize: 14, color: DIM, lineHeight: 1.5 }}>expected: hardware · RMA</Text>
+        </Box>
+
+        <Box style={{ width: 1136, height: 240 }}>
+            <Text style={{ fontFamily: MONO, fontSize: 13, color: DIM, lineHeight: 1.6 }}>
+                AI tool-call trace: arguments printed exactly as they were sent
+            </Text>
+            <Image src='assets/crop-tooltrace.png' style={{ width: 1096, height: 204, marginTop: 8, border: '1px solid #E9EDF4' }} />
+        </Box>
+
+        <Box style={{ width: 1136, height: 168, flexDirection: 'row', gap: 36, marginTop: 32 }}>
+
+            <Box style={{ width: 700 }}>
+                <Text style={{ fontSize: 20, fontWeight: 600, color: INK, lineHeight: 1.45 }}>Numbers come from tools, not from the model</Text>
+                <Text style={{ fontSize: 15, color: BODY, lineHeight: 1.62, marginTop: 10, width: 700 }}>
+                    The model is not allowed to compute or recall a number. <span style={{ fontFamily: MONO, color: INK }}>lookup_xid</span> reads the Xid knowledge base,
+                    <span style={{ fontFamily: MONO, color: INK }}> inspect_node</span> reads node telemetry. A value that was never fetched cannot appear in the conclusion.
+                </Text>
+            </Box>
+
+            <Box style={{ width: 400 }}>
+                <Text style={{ fontFamily: MONO, fontSize: 13, color: BLUE, lineHeight: 1.6 }}>T1 · T2 · T3</Text>
+                <Text style={{ fontSize: 15, color: BODY, lineHeight: 1.62, marginTop: 8, width: 400 }}>
+                    Citation ids are attached by the app when a call actually executes. A reference the model invents is dropped, and the model is told it was dropped.
+                </Text>
+            </Box>
+
+        </Box>
+
+    </Box>
+
+    <Box style={{ width: 1136, height: 48, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+        <Text style={{ fontSize: 14, color: DIM }}>The model writes the verdict; the app supplies and checks everything underneath it</Text>
+        <Text style={{ fontFamily: MONO, fontSize: 14, color: DIM }}>10 / 14</Text>
+    </Box>
+</Slide>

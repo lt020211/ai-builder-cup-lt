@@ -1,0 +1,4 @@
+{
+  "type": "module",
+  "//": "此文件只服务于 Node 侧的自检脚本（scripts/verify_triage.mjs）：让 Node 把这些浏览器端模块当 ES 模块加载。浏览器不读 package.json，线上行为与此文件无关。"
+}

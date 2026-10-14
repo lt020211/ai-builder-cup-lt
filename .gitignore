@@ -105,3 +105,28 @@ tmp/
 temp/
 *.tmp
 nohup.out
+
+# ============================================================
+# 录屏中间产物（帧序列几万张、几百 MB）
+# 保留 timeline.json / beats.json / voice.m4a 与成片 docs/*.mp4，帧目录本身不进仓库
+# ============================================================
+shots-demo/frames/
+shots-demo/captioned/
+shots-demo/voice/
+
+# 从成片取回画面后重建的帧序列（同上，也是中间产物）
+shots-reburn/
+
+# ============================================================
+# deck 的可再生产物
+# 源是 deck/slides/*.slide + deck/make_crops.py + deck/make_pdf.py；
+# render/ 是 slidep 渲染出的 14 张 1920×1080 页图，两者都能从 DSL 重跑出来。
+# 提交的是 docs/Training-Failure-Triage-deck.pdf。
+# （deck/.cache/ 已被上面的 `.cache/` 规则覆盖）
+#
+# ★ `.slidep/` 不加路径前缀、写成通配：slidep 把它写在**当前工作目录**下，
+#   从仓库根调用就落在根目录、从 deck/ 调用就落在 deck/ 下。锚死 `deck/.slidep/`
+#   会漏掉根目录那一份，然后被 `git add -A` 悄悄收进去。
+# ============================================================
+deck/render/
+.slidep/

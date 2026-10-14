@@ -1,0 +1,45 @@
+// 06 · 章节扉页 02 —— 深底 + 网格 + 巨型「16」
+const FONT = 'Inter, "Helvetica Neue", Arial, sans-serif';
+const MONO = '"JetBrains Mono", "SF Mono", Menlo, monospace';
+const BLUE = '#2F6BFF';
+const DEEP = 'linear-gradient(160deg, #0B1220 0%, #131E33 62%, #0B1220 100%)';
+
+const GRID_X = [0, 71, 142, 213, 284, 355, 426, 497, 568, 639, 710, 781, 852, 923, 994, 1065, 1136];
+const GRID_Y = [0, 64, 128, 192, 256, 320, 384, 448, 512, 576];
+
+<Slide style={{ width: 1280, height: 720, padding: '72px', background: DEEP, fontFamily: FONT }}>
+    <Box style={{ position: 'relative', width: 1136, height: 576 }}>
+
+        <Box style={{ position: 'absolute', left: 0, top: 0, width: 1136, height: 576 }}>
+            <svg width={1136} height={576} viewBox='0 0 1136 576'>
+                {GRID_X.map((x, i) => (
+                    <line key={'gx' + i} x1={x} y1={0} x2={x} y2={576} stroke='rgba(255,255,255,0.045)' strokeWidth={1} />
+                ))}
+                {GRID_Y.map((y, i) => (
+                    <line key={'gy' + i} x1={0} y1={y} x2={1136} y2={y} stroke='rgba(255,255,255,0.045)' strokeWidth={1} />
+                ))}
+            </svg>
+        </Box>
+
+        <Box style={{ position: 'absolute', right: 0, top: 118, width: 620, alignItems: 'flex-end' }}>
+            <Text style={{ fontFamily: MONO, fontSize: 300, fontWeight: 700, color: 'rgba(47,107,255,0.17)', lineHeight: 1 }}>17</Text>
+        </Box>
+
+        <Box style={{ position: 'relative', width: 840, height: 576, justifyContent: 'center', gap: 18 }}>
+            <Text style={{ fontFamily: MONO, fontSize: 14, color: BLUE, letterSpacing: 3 }}>CHAPTER 02</Text>
+            <Text style={{ fontSize: 64, fontWeight: 700, color: '#FFFFFF', lineHeight: 1.1 }}>What we built</Text>
+            <Text style={{ fontSize: 24, color: '#94A3B8', lineHeight: 1.5 }}>An agent that runs a whole shift from a single click</Text>
+            <Box style={{ width: 88, height: 3, background: 'rgba(255,255,255,0.28)', marginTop: 14 }} />
+            <Text style={{ fontSize: 18, color: '#C7D2E0', lineHeight: 1.65, width: 780 }}>
+                The shift recorded for our demo video made <span style={{ fontFamily: MONO, color: '#FFFFFF' }}>17</span> tool calls:
+                one cluster scan, six node reads, the knowledge-base lookups, then the write, the ticket and the notification.
+                The loop is capped at 12 turns, so a shift that runs long is continued from the calls already made instead of restarted.
+            </Text>
+        </Box>
+
+        <Box style={{ position: 'absolute', left: 0, bottom: 0, width: 1136, flexDirection: 'row', justifyContent: 'flex-end' }}>
+            <Text style={{ fontFamily: MONO, fontSize: 14, color: 'rgba(255,255,255,0.45)' }}>06 / 14</Text>
+        </Box>
+
+    </Box>
+</Slide>

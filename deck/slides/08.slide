@@ -1,0 +1,61 @@
+// 08 · 执行是真的 —— 顶部全宽证据条 + 底部巨型数字
+const FONT = 'Inter, "Helvetica Neue", Arial, sans-serif';
+const MONO = '"JetBrains Mono", "SF Mono", Menlo, monospace';
+const INK = '#0B1220';
+const GREEN = '#16B981';
+const DIM = '#64748B';
+const BODY = '#1A2434';
+
+const WRITES = [
+    { field: 'lyg2112.cordoned', from: 'false', to: 'true' },
+    { field: 'lyg2115.cordoned', from: 'false', to: 'true' },
+];
+
+<Slide style={{ width: 1280, height: 720, padding: '18px 72px', background: '#FFFFFF', fontFamily: FONT }}>
+    <Box style={{ width: 1136, height: 92, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end' }}>
+        <Text style={{ fontSize: 34, fontWeight: 700, color: INK, lineHeight: 1.3 }}>The writes actually landed</Text>
+        <Text style={{ fontFamily: MONO, fontSize: 14, color: DIM, lineHeight: 1.45 }}>Operation log · write, then re-read</Text>
+    </Box>
+
+    <Box style={{ width: 1136, height: 544 }}>
+
+        <Box style={{ width: 1136, height: 264, alignItems: 'center' }}>
+            <Image src='assets/crop-oplog.png' style={{ width: 1136, height: 264, border: '1px solid #E9EDF4' }} />
+        </Box>
+
+        <Box style={{ width: 1136, height: 260, flexDirection: 'row', gap: 32, marginTop: 20 }}>
+
+            <Box style={{ width: 330, justifyContent: 'center' }}>
+                <Text style={{ fontFamily: MONO, fontSize: 104, fontWeight: 700, color: GREEN, lineHeight: 1.05 }}>2 / 2</Text>
+                <Text style={{ fontSize: 15, color: DIM, lineHeight: 1.5, marginTop: 6 }}>actions executed, then re-read from the server to confirm</Text>
+            </Box>
+
+            <Box style={{ width: 774, gap: 12, justifyContent: 'center' }}>
+                {WRITES.map((w, i) => (
+                    <Box key={i} style={{ flexDirection: 'row', alignItems: 'center', gap: 14 }}>
+                        <Text style={{ fontFamily: MONO, fontSize: 17, fontWeight: 500, color: INK, width: 200 }}>{w.field}</Text>
+                        <Text style={{ fontFamily: MONO, fontSize: 17, color: DIM }}>{w.from}</Text>
+                        <Text style={{ fontFamily: MONO, fontSize: 17, color: GREEN }}>→</Text>
+                        <Text style={{ fontFamily: MONO, fontSize: 17, fontWeight: 700, color: GREEN }}>{w.to}</Text>
+                    </Box>
+                ))}
+                <Box style={{ width: 774, height: 1, background: '#E6EBF3', marginTop: 4, marginBottom: 4 }} />
+                <Text style={{ fontSize: 20, fontWeight: 600, color: INK, lineHeight: 1.45 }}>
+                    A write is only logged as verified after the app reads the field back from Firestore.
+                </Text>
+                <Text style={{ fontSize: 14, color: DIM, lineHeight: 1.55 }}>
+                    A write that returns success but leaves the value unchanged is logged as “verification failed” instead.
+                    Open the <span style={{ fontFamily: MONO, color: BODY }}>cluster</span> collection in the Firebase console during a
+                    run and the two states move while you watch.
+                </Text>
+            </Box>
+
+        </Box>
+
+    </Box>
+
+    <Box style={{ width: 1136, height: 48, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+        <Text style={{ fontSize: 14, color: DIM }}>Both cordons are low-risk actions, so the agent was allowed to run them itself</Text>
+        <Text style={{ fontFamily: MONO, fontSize: 14, color: DIM }}>08 / 14</Text>
+    </Box>
+</Slide>

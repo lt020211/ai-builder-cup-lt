@@ -1,0 +1,146 @@
+{
+ "note": "由 record_demo.mjs --dump-beats 生成；字幕/中文/旁白三者的唯一来源是 BEATS",
+ "calls": "17",
+ "beats": [
+  {
+   "id": "intro-1",
+   "caption": "Multi-cloud GPU training clusters, run by a small on-call team.",
+   "zh": "多云的 GPU 训练集群，靠一支小规模值班团队撑着。",
+   "voice": "We run GPU training clusters across several clouds, with a small on-call team.",
+   "hold": 7
+  },
+  {
+   "id": "intro-2",
+   "caption": "The costly mistakes are direction errors. A software bug gets treated as failing hardware.",
+   "zh": "贵的误判是方向错：软件的问题，当成硬件坏了。",
+   "voice": "The costly mistakes are direction errors. A software bug gets read as broken hardware.",
+   "hold": 7
+  },
+  {
+   "id": "live",
+   "caption": "On-call mode. Nobody pastes a log here; the cluster state is read live from Cloud Firestore.",
+   "zh": "值班模式。这里没有人贴日志，集群状态从 Cloud Firestore 实时读出来。",
+   "voice": "This is on-call mode. Nobody pastes a log. The cluster state is read live from Cloud Firestore.",
+   "hold": 11
+  },
+  {
+   "id": "start",
+   "caption": "One click starts the shift. In production a scheduler triggers it; a static site has no resident process.",
+   "zh": "点一下开始值班。真实部署里由调度器定时触发；纯静态站点没有常驻进程。",
+   "voice": "One click starts it. In production a scheduler triggers this. A static site has no resident process.",
+   "hold": 7
+  },
+  {
+   "id": "scan",
+   "caption": "It scans the cluster itself, then inspects each node. This shift took 17 tool calls, all on screen.",
+   "zh": "它自己扫集群、逐个节点取证。这次值班用了 17 次工具调用，全部在屏幕上。",
+   "voice": "It scans the cluster, then inspects each node. This shift took 17 tool calls, and every one is on screen.",
+   "hold": 9
+  },
+  {
+   "id": "trace",
+   "caption": "scan_cluster and inspect_node supply every number the model may use. It does no arithmetic of its own.",
+   "zh": "模型能用的每个数字都由 scan_cluster 与 inspect_node 提供；它自己不做算术。",
+   "voice": "Every number the model may use comes from scan_cluster or inspect_node. It does no arithmetic of its own.",
+   "hold": 17
+  },
+  {
+   "id": "pair-1",
+   "caption": "Two nodes, the same fault code: Xid 94.",
+   "zh": "两个节点，报的是同一个故障码：Xid 94。",
+   "voice": "These two nodes reported the same fault code, Xid 94.",
+   "hold": 8
+  },
+  {
+   "id": "pair-2",
+   "caption": "lyg2103: one occurrence in 30 days, correctable ECC flat. Verdict hardware_watch, so no RMA.",
+   "zh": "lyg2103：30 天只出现 1 次，可纠正 ECC 平稳。判定 hardware_watch，不报修。",
+   "voice": "lyg2103 fired once in thirty days, and its correctable ECC is flat. Verdict hardware watch. No RMA.",
+   "hold": 9
+  },
+  {
+   "id": "pair-3",
+   "caption": "lyg2112: 53 occurrences in 30 days, correctable ECC at 118 and still rising. File the RMA.",
+   "zh": "lyg2112：30 天累计 53 次，可纠正 ECC 已到 118 且仍在上升。建议报修。",
+   "voice": "lyg2112 fired 53 times. Correctable ECC is at 118 and still climbing. File the RMA.",
+   "hold": 9
+  },
+  {
+   "id": "pair-4",
+   "caption": "The decision came from the trend, not from the code.",
+   "zh": "判断依据是趋势，不是那个码本身。",
+   "voice": "The decision came from the trend, not from the code.",
+   "hold": 6
+  },
+  {
+   "id": "oplog",
+   "caption": "It acted. It cordoned two nodes, and both writes are in the operation log.",
+   "zh": "它动手了：cordon 了两个节点，两条写入都在操作日志里。",
+   "voice": "It acted. It cordoned two nodes, and both writes are in the operation log.",
+   "hold": 11
+  },
+  {
+   "id": "verify",
+   "caption": "After each write the app re-reads the value from the server. That is what \"verification passed\" means here.",
+   "zh": "每次写完之后，它会重新读服务端的值。这就是「回验通过」的含义。",
+   "voice": "After every write, the app re-reads the value from the server. That is what verification passed means here.",
+   "hold": 10
+  },
+  {
+   "id": "raw",
+   "caption": "The same value, read straight from the Firestore REST API instead of our own interface.",
+   "zh": "同一个值，直接取自 Firestore REST API，而不是我们自己的界面。",
+   "voice": "Same value, read straight from the Firestore REST API, not from our own interface.",
+   "hold": 11
+  },
+  {
+   "id": "back",
+   "caption": "After a full page reload the state is the same. lyg2112 is still cordoned.",
+   "zh": "整页重载之后状态一致，lyg2112 仍然是 cordoned。",
+   "voice": "After a full page reload the state is the same. lyg2112 is still cordoned.",
+   "hold": 9
+  },
+  {
+   "id": "ticket",
+   "caption": "The RMA is filled in and ready, with the evidence and commands attached. It is left unsubmitted.",
+   "zh": "报修单已经填好，证据与命令都附上了，但故意不提交。",
+   "voice": "The RMA is filled in and ready, with the evidence and commands attached. It is deliberately left unsubmitted.",
+   "hold": 10
+  },
+  {
+   "id": "notify",
+   "caption": "The on-call engineer is notified, with what happened and what is still waiting on them.",
+   "zh": "值班人会收到通知：发生了什么，以及还差他哪一步。",
+   "voice": "The on-call engineer is notified, with what happened and what is still waiting on them.",
+   "hold": 8
+  },
+  {
+   "id": "bench-1",
+   "caption": "The same 14 cases, run two ways. The table lookup scores 11 out of 14.",
+   "zh": "同一个案例库的 14 道题，跑两条路径。查 Xid 码表那条对了 11 道。",
+   "voice": "The same fourteen cases, run two ways. The table lookup scores eleven out of fourteen.",
+   "hold": 9
+  },
+  {
+   "id": "bench-2",
+   "caption": "All three misses need a cause rather than a code: the 30-day trend, and a secondary event read as the root cause.",
+   "zh": "错的三题都要看原因而不是码：30 天趋势，以及把次生事件当成了根因。",
+   "voice": "All three misses need a cause, not a code. Reading the thirty-day trend, and telling a secondary event from the root cause.",
+   "hold": 11
+  },
+  {
+   "id": "bench-3",
+   "caption": "You can rerun this in the browser. Same code path as the scoring script.",
+   "zh": "这个数字你可以在浏览器里自己重跑，和评分脚本共用同一份代码。",
+   "voice": "You can rerun it in the browser. Same code path as the scoring script.",
+   "hold": 6
+  },
+  {
+   "id": "end",
+   "caption": "Training Failure Triage turns a failure scene into an evidence-backed call, and this one was acted on.",
+   "zh": "训练故障分诊器把一次训练失败的现场变成有证据支撑的判断，而这一次已经被真的处置过。",
+   "voice": "Training Failure Triage turns a failure scene into an evidence-backed call. This one was acted on.",
+   "hold": 8
+  }
+ ]
+}

@@ -1,0 +1,68 @@
+// 14 · 结束页 —— 居中金句 + 可重跑的验收脚本
+const FONT = 'Inter, "Helvetica Neue", Arial, sans-serif';
+const MONO = '"JetBrains Mono", "SF Mono", Menlo, monospace';
+const BLUE = '#2F6BFF';
+const DEEP = 'linear-gradient(160deg, #0B1220 0%, #131E33 62%, #0B1220 100%)';
+
+const GRID_X = [0, 71, 142, 213, 284, 355, 426, 497, 568, 639, 710, 781, 852, 923, 994, 1065, 1136];
+const GRID_Y = [0, 64, 128, 192, 256, 320, 384, 448, 512, 576];
+
+const CHECKS = [
+    { k: 'verify_triage.mjs', v: 'rule baseline and result invariants' },
+    { k: 'verify_pipeline.mjs', v: '81 / 81, fake transport and in-memory cluster' },
+    { k: 'browser_check.mjs', v: '31 / 31, real Chrome against real Firestore' },
+];
+
+<Slide style={{ width: 1280, height: 720, padding: '72px', background: DEEP, fontFamily: FONT }}>
+    <Box style={{ position: 'relative', width: 1136, height: 576 }}>
+
+        <Box style={{ position: 'absolute', left: 0, top: 0, width: 1136, height: 576 }}>
+            <svg width={1136} height={576} viewBox='0 0 1136 576'>
+                {GRID_X.map((x, i) => (
+                    <line key={'gx' + i} x1={x} y1={0} x2={x} y2={576} stroke='rgba(255,255,255,0.045)' strokeWidth={1} />
+                ))}
+                {GRID_Y.map((y, i) => (
+                    <line key={'gy' + i} x1={0} y1={y} x2={1136} y2={y} stroke='rgba(255,255,255,0.045)' strokeWidth={1} />
+                ))}
+            </svg>
+        </Box>
+
+        <Box style={{ position: 'relative', width: 1136, height: 576, alignItems: 'center', justifyContent: 'center', gap: 20 }}>
+
+            <Text style={{ fontFamily: MONO, fontSize: 14, color: BLUE, letterSpacing: 3 }}>AI BUILDER CUP 2026 · JAPAC</Text>
+
+            <Text style={{ fontSize: 52, fontWeight: 600, color: '#FFFFFF', lineHeight: 1.25, textAlign: 'center', width: 1000 }}>
+                Acted on, not just recommended
+            </Text>
+
+            <Text style={{ fontSize: 20, color: '#94A3B8', lineHeight: 1.6, textAlign: 'center', width: 880 }}>
+                The demo run ends with a verdict, an operation log entry, and a read-back that proves the write landed.
+            </Text>
+
+            <Box style={{ width: 96, height: 3, background: 'rgba(255,255,255,0.3)', marginTop: 10, marginBottom: 6 }} />
+
+            <Box style={{ flexDirection: 'row', gap: 34, alignItems: 'flex-start' }}>
+                <Box style={{ gap: 6 }}>
+                    <Text style={{ fontFamily: MONO, fontSize: 13, color: 'rgba(255,255,255,0.5)', lineHeight: 1.5 }}>live demo</Text>
+                    <Text style={{ fontFamily: MONO, fontSize: 15, color: '#FFFFFF', lineHeight: 1.5 }}>gpu-waste-auditor-2026.web.app</Text>
+                </Box>
+                <Box style={{ width: 1, height: 74, background: 'rgba(255,255,255,0.16)' }} />
+                <Box style={{ gap: 6 }}>
+                    <Text style={{ fontFamily: MONO, fontSize: 13, color: 'rgba(255,255,255,0.5)', lineHeight: 1.5 }}>rerun the numbers</Text>
+                    {CHECKS.map((c, i) => (
+                        <Text key={i} style={{ fontFamily: MONO, fontSize: 14, color: '#C7D2E0', lineHeight: 1.55 }}>
+                            {c.k}  <span style={{ color: 'rgba(255,255,255,0.5)' }}>{c.v}</span>
+                        </Text>
+                    ))}
+                </Box>
+            </Box>
+
+        </Box>
+
+        <Box style={{ position: 'absolute', left: 0, bottom: 0, width: 1136, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+            <Text style={{ fontSize: 14, color: 'rgba(255,255,255,0.45)' }}>Training Failure Triage · AI Builder Cup 2026</Text>
+            <Text style={{ fontFamily: MONO, fontSize: 14, color: 'rgba(255,255,255,0.45)' }}>14 / 14</Text>
+        </Box>
+
+    </Box>
+</Slide>

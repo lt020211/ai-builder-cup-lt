@@ -1,4 +1,4 @@
-# GPU 算力浪费审计器
+# 训练故障分诊器（Training Failure Triage）
 
 > Google Cloud AI Builder Cup 2026（JAPAC）参赛项目
 > 参赛者：lt020211 ｜ 作品名：AI Builder Cup-lt
@@ -9,340 +9,449 @@
 
 **<https://gpu-waste-auditor-2026.web.app>** ｜ 备用域名 <https://gpu-waste-auditor-2026.firebaseapp.com>
 
-点「加载示例数据并分析」即可。这是**纯静态站点**：没有后端服务，审计计算在浏览器内完成，
-Gemini 通过 **Firebase AI Logic** 直连调用（模型自主决定调用哪些工具）。
+> 站点名沿用了上一版选题（`gpu-waste-auditor-2026`），**域名不代表本版选题**。
+> 重新建一个站点要重走一遍 Hosting 配置，性价比不高，所以保留原名。
 
-实测一次完整分析约 **9 秒**，模型自主发起 **11 次工具调用**，无任何后端参与。
-即使模型不可用，页面也会自动降级为离线规则模板，功能完整可演示。
+页面有四个标签页：**单次分诊** / **值班 Agent** / **基准对照** / **动作库与审批**。
+开局无需配置：集群状态与案例都是内置的，免费层配额够跑完整演示
+（一次巡检约消耗 12–16 次模型请求，按轮次折算；详见下文「配额是演示期最硬的约束」）。
 
-> 免费层配额有限（每个模型 20 次/天），所以实现了模型降级链——
-> 首选 `gemini-3.5-flash-lite`（单回合约 1.5s），配额用尽后依次切到备用模型，
-> 界面会如实显示「为什么换了模型」。
+## 🎬 演示视频与方案 deck
+
+| 提交物 | 文件 | 规格 |
+|---|---|---|
+| 演示视频 | [`docs/Training-Failure-Triage-demo.mp4`](docs/Training-Failure-Triage-demo.mp4) | **2:45**（上限 3 分钟）、1600×900、15 fps、**英语旁白**、中英双语硬字幕、20 拍 |
+| 方案说明 deck | [`docs/Training-Failure-Triage-deck.pdf`](docs/Training-Failure-Triage-deck.pdf) | 14 页，分三章 |
+
+**两者都不是手工剪出来的。** 演示视频由 `scripts/record_demo.mjs` 按
+[docs/demo-script.md](docs/demo-script.md) 的分镜**真的走了一遍线上站点**，逐帧录下来；
+英语旁白由 `scripts/demo_voice.py` 按每一拍的真实时间窗合成并贴合；字幕、进度条与编码
+由 `scripts/demo_caption.py` 烧上去。deck 里的每一张读数截图也来自真实运行的页面。
+
+```
+node scripts/record_demo.mjs                        # 录制：真的走一遍 → shots-demo/
+python3 scripts/demo_voice.py                       # 配音：逐拍合成英语旁白 → shots-demo/voice.m4a
+python3 scripts/demo_caption.py --dir shots-demo \
+        --out docs/Training-Failure-Triage-demo.mp4 \
+        --voice shots-demo/voice.m4a                # 合成：字幕 + 进度条 + 旁白 + 编码
+```
+
+拆成三步是为了**可重跑**：改文案只要重跑合成，不用重录（重录要再花一次模型配额）。
+字幕切换的时刻直接取录制时记下的每一拍真实起止时间，不做剪辑拼接，所以画面与字幕天然对齐。
+
+旁白同一条道理：**先合成、量出真实时长、再决定语速**。一段话装不进它那一拍的时间窗，
+就说明该把话说短，而不是把它念快 —— 语速上下限卡在 −15% ~ +30%（`scripts/demo_voice.py`
+里的 `RATE_MIN` / `RATE_MAX`），顶到边界的拍会在日志里列出来。宁可在宽窗口的镜头上留几秒
+静音让人看屏幕，也不把一段话拧成快放。
+
+> ★ 录制脚本在本项目里同时充当**证据守门人**，四类问题一律拦下、不许出片：
+> 字幕里还留着没回填的调用次数占位符、超长冻帧（画面按住不动会被误读成「它在思考」）、
+> 总时长超过 180 秒、以及**开录前面板不对**。
+> 最后一条来自一次真实的教训：曾经整场录成了「单次分诊」页，而日志上一切正常 ——
+> 所以它现在是一条硬断言，不是清单上的一个勾。详见
+> [docs/demo-script.md](docs/demo-script.md) 的「这份成片是脚本产出的」一节。
+
+**视频里主动交代了三条边界**（不交代的话，观感会比事实更可信）：
+
+1. 演示集群是**构造的模拟环境**，不含任何真实集群信息，也不接入任何生产集群；
+2. 巡检是**由人点一下开始**的 —— 纯静态站点没有常驻进程，真实部署应由 Cloud Scheduler 触发；
+3. 通知只落到 `notifications` 队列，**不等于已经推到 IM**。
 
 ## 一句话方案
 
-**把多云 GPU 集群「预留了卡却没在用」的隐性浪费，算成电费与碳排，再让 Gemini 自主调用工具取数、给出可排期可决策的优化动作——并回答「什么时候跑最省碳」。**
+**把一段训练失败的现场，变成带证据链的根因判断 —— 并明确回答那个最要命的问题：
+「这是代码的锅，还是该换卡？」**
 
-> 从「事后审计报告」升级为「碳感知调度决策器」：AI 不再只解释数字，而是**先调工具拿数据、再下结论**，
-> 且每条建议都能在前端被**接受或拒绝**，交互终点是决策而不是阅读。
+一线有一对**方向相反**的典型误判，公开的集群运维资料反复在讲同一件事：
+
+| 误判 | 表现 | 代价 |
+|---|---|---|
+| **把应用 bug 当硬件故障** | 看到 Xid 13 / 31 / 43 就去报修 | 一块好卡被下线、走 RMA、集群容量白掉 |
+| **把硬件劣化当偶发** | 看到 Xid 94 就说「重启一下就好」 | 劣化持续累积，等影响面扩大才追悔 |
+
+这两种误判**用同一个错误码就能触发**。所以判别依据不能是码本身，只能是
+**趋势**（30 天频次、ECC 是否同步上升）、**因果链**（Xid 45 是次生事件还是根因）、
+以及**内核与进程状态**。这三件事恰好是模型能做、查表做不好的。
 
 ## 赛题对齐
 
 | 项目 | 内容 |
 |---|---|
 | 赛题 / 方向 | 可持续性和社会影响 |
-| 目标用户 | 多云 GPU 集群的运维与平台团队、算力预算负责人 |
-| 核心痛点 | 传统监控只报「利用率是多少」，不报「这些浪费值多少钱、该先动哪个、动了能省多少」 |
-| 我们的解法 | 确定性计算层算出浪费卡时/电费/电耗/碳排 → AI 通过 function calling 自主取数，产出根因解释与可决策的优化动作 |
-| 为什么必须用 AI | 浪费模式识别与根因推断依赖跨节点、跨卡型的上下文理解；把审计结果翻译成可排期的动作需要自然语言解释能力。规则引擎能给数字，给不出「为什么」和「先做哪个」 |
+| 目标用户 | 多云 GPU 训练集群的一线运维与平台团队 |
+| 核心痛点 | 监控告诉你 Xid 是多少，**不告诉你该不该换卡**。判错的方向是双向的：好卡被下线，或坏卡被放过 |
+| 我们的解法 | 让 Gemini 自主调用 10 个工具取证（查 Xid 知识库、拉节点遥测、核算显存、校验版本栈），产出**六分类 + 是否报修**两个可直接行动的结论；值班模式下还自己止损、备好工单、通知人 |
+| 为什么必须用 AI | 「偶发 vs 劣化」「次生 vs 根因」需要跨字段的因果推断。规则引擎能给票数，给不出因果链 —— 这一点我们用可复现的基准（11/14）证明，而不是宣称 |
 
-### 两个差异化设计
+### 三个差异化设计
 
-**1. AI 是工具调用者，不是文本生成器。** 模型必须先调 `query_metrics` 取数、调 `simulate_defer` 算碳，才能下结论。
-数字全部来自确定性代码，模型无法凭空生成——这直接对应评审项里 40% 的「技术质量与生成式 AI 实现」。
+**1. AI 是工具调用者，不是文本生成器。**
+模型必须先调 `lookup_xid` 查知识库、调 `inspect_node` 拉趋势，才能下结论。
+所有数字都由确定性代码算出，模型无法凭空生成 —— 前端把每一次调用和它的参数
+**原样展示**出来，每条结论都带引用编号（如 `T2`），可指回产生它的那次调用。
 
-**2. 引入电网碳强度时段曲线（碳感知调度）。** 同样一度电，正午光伏出力高峰时碳强度最低（0.82×），
-晚高峰火电调峰时最高（1.10×）。这意味着**电耗不变、电费不变，只把负载挪个时段，碳排就能降约 25%**。
-这是「可持续性」赛道里少见的、有物理依据且可量化的优化维度。
+**2. 风险等级不从模型来。**
+14 条修复动作的 `risk` 字段写死在动作库里，模型只能用 `action_id` **选用**，
+**没有任何途径**声明或修改等级 —— 它连一个能表达「这次算低风险」的参数都没有。
+所以模型无法「说服」系统把一个高风险动作（重装驱动、提交 RMA）降级来绕过审批。
+这与「数字必须来自工具」是同一条纪律在另一个层面的应用。
+
+**3. 执行是真的，而且执行完会回验。**
+值班模式连着一个**有真实状态的模拟集群**（Cloud Firestore）。
+Agent 的「制止损」不是界面动画：它真的改写节点状态，**改完自己再读一次**来确认生效，
+每一次动作都写进操作日志。执行了但没生效，日志里会写「回验未通过」而不是谎报成功。
+你可以在 Firebase 控制台刷新 `cluster` 集合，亲眼确认数据变了。
+
+## 一次值班巡检，实际发生了什么
+
+下面是**线上实测的一轮**（不是设计目标，是跑出来的数字）：
+
+| 项目 | 实测 |
+|---|---|
+| 工具调用 | **16 次**（1 次 `scan_cluster` → 逐个节点 `inspect_node` → `lookup_xid` 查库 → `execute_action` → `draft_ticket` → `notify_operator`） |
+| 执行的动作 | **2 条，全部「回验通过」**（对两个节点执行 cordon，禁止接新任务） |
+| 待人工批准的工单 | **1 张**（状态 `draft`，标注「草稿 · 待人工提交」） |
+| 通知队列 | **1 条**（状态 `queued`） |
+| 耗时 | **41.2 秒** |
+
+> ★ **巡检每次都不一样。** 集群每轮都从重置过的干净状态开始，但怎么走由模型自己决定，
+> 所以调用次数与通知条数会变。仓库里随附的演示视频录的是**另一次**巡检：工具调用 **17** 次、
+> 操作日志 2 条、通知队列 3 条。
+> 视频字幕里的「共 17 次调用」不是事先写死的，而是录制脚本在巡检跑完后**从画面上读回来回填**的
+> （`{calls}` 占位符，见 `scripts/record_demo.mjs` 与 `docs/demo-script.md`）。
+
+同一次巡检里出现了最有说服力的对照：**两个节点都报了 Xid 94，结论相反**。
+
+- `lyg2103`：近 30 天只发生 **1 次**、可纠正 ECC 平稳 → `hardware_watch`，**不建议报修**
+- `lyg2112`：近 30 天累计 **53 次**、可纠正 ECC 已到 **118** 且仍在上升 → 判定硬件劣化，**建议报修**
+
+判别依据**从来不是错误码本身，是趋势**。
+
+## 为什么必须用模型：可复现的对照
+
+「这件事规则做不好」是一个**可被证伪的论点**，所以我们真的跑了一遍去证伪它。
+
+`scripts/verify_triage.mjs` 用**纯规则路径**（取预分析投票最高的分类，是 hardware 就建议报修
+—— 也就是真实世界里最常见的做法：看 Xid 码查表）把全部 **14 个**案例跑一遍：
+
+```
+规则基线准确率（分类 + 是否报修全对）：11 / 14　（78.6%）
+  仅看分类：11 / 14　仅看是否报修：12 / 14
+```
+
+它错的三题，各对应一条诊断原则：
+
+| 案例 | 期望 | 规则给出 | 规则读不出的东西 |
+|---|---|---|---|
+| `case-xid48-dbe` | hardware + 报修 | application | Xid 45 是「前序错误的后果」，把它当根因会查错方向 |
+| `case-xid94-rising` | hardware + 报修 | hardware_watch | 与 `case-xid94-single` **同一个码、同一张卡型**，判别依据是趋势而非码 |
+| `case-gpu-hang-deadlock` | application | network | 与 `case-gpu-hang-xid62` 都是「训练卡死」，判据是内核是否干净、进程是否 D 状态 |
+
+这个数字**可以在浏览器里自己点一遍验证**（「基准对照」标签页 → 跑规则基线，本地秒出、不消耗配额），
+页面跑的是同一份代码。**我们不上报任何跑不出来的成绩。**
+AI 分诊那一侧的数字不由人填 —— 跑满 14 个案例后自动统计，未跑满就显示为空。
+
+## 四个标签页
+
+| 标签页 | 回答什么问题 |
+|---|---|
+| **单次分诊** | 贴一段失败现场 → 六分类 + 是否报修 + 证据链 + 处置清单（按风险从低到高排列）+ 执行包下载 |
+| **值班 Agent** | 不贴日志。点一下，它自己扫集群 → 取证 → 止损 → 建单 → 通知人。含集群状态、工具调用轨迹、操作日志（带回验结果）、待人工批准、通知队列 |
+| **基准对照** | 同一份案例库跑两条路径，比两个能被当场证伪的字段：**故障分类**与**是否报修** |
+| **动作库与审批** | 14 条动作各自的爆炸半径、审批要求、命令、预期输出、回滚；以及系统**明确不建议**的动作 |
 
 ## 快速开始（本地）
 
-```bash
-# 一键：建虚拟环境 → 装依赖 → 跑测试 → 起服务
-chmod +x scripts/run_local.sh && ./scripts/run_local.sh
-```
-
-然后打开 <http://127.0.0.1:8080>，点击「加载示例数据并分析」。
-
-也可以手动分步：
+这是一个**纯静态站点**：没有后端服务，没有构建步骤。用任意静态服务器托管 `firebase/public/` 即可。
 
 ```bash
-python3 -m venv .venv && source .venv/bin/activate
-pip install -r requirements.txt
-python -m unittest discover -s tests -v      # 跑测试
-python -m src.app                            # 起服务
+# 起本地静态服务（Python 自带，无需装任何依赖）
+python3 -m http.server 8899 --directory firebase/public
+# 打开 http://127.0.0.1:8899/
 ```
 
-**不配置任何密钥也能完整演示**：AI 诊断会自动降级为离线规则模板。要启用真正的模型诊断：
+跑三个验收脚本（需要 Node ≥ 18；`verify_*` 完全离线，不消耗任何模型配额）：
 
 ```bash
-cp .env.example .env      # 填入 GEMINI_API_KEY
-export GEMINI_API_KEY="你的密钥"
+node scripts/verify_triage.mjs      # 不变量校验 + F8 基准（规则基线 11/14）
+node scripts/verify_pipeline.mjs    # 端到端契约测试：桩 fetch，跑通「模型 → 工具 → 结果」整条链路
+node scripts/browser_check.mjs http://127.0.0.1:8899/   # 真 Chrome 端到端验收（会真的调用模型）
 ```
 
-## 部署到 Firebase（线上演示用的就是这条路径）
-
-这套代码有**两份等价实现**，选择哪份取决于部署形态：
-
-| | 浏览器端 JS（线上） | Python / Flask（本地与 Cloud Run） |
+| 脚本 | 当前状态 | 不需要什么 |
 |---|---|---|
-| 位置 | `firebase/public/` | `src/` |
-| 计算 | 浏览器内 | 服务端 |
-| Gemini 调用 | Firebase AI Logic 直连 | 服务端 HTTP |
-| 部署 | Firebase Hosting（**免结算账号、免绑卡**） | Cloud Run（需结算账号） |
-| 用途 | 线上可点开的演示 | 参考实现、单元测试、可复算 |
+| `verify_triage.mjs` | **全部通过**；F8 基线 **11 / 14** | 不需要网络、不需要 Firestore、不消耗配额 |
+| `verify_pipeline.mjs` | **81 / 81** 通过 | 不需要网络、不需要 Firestore、不消耗配额 |
+| `browser_check.mjs` | **31 / 31** 通过（本地与线上跑的是同一套断言） | 需要 Chrome；会真的调用模型、会真的读写 Firestore |
 
-两份实现**算法与常量为逐行一致**，并用差分测试守住：同一份输入分别跑两份实现、逐字段比对。
-详见下方「移植保真度」一节。
+> `browser_check.mjs` 默认用一次性临时 profile。传 `TRIAGE_PROFILE=<dir>` 可以复用同一份 ——
+> 好处是页面写在 `localStorage` 里的 AI 结果缓存能跨轮保留，**重复验收不必反复烧模型配额**。
+
+## 部署
+
+### 发布静态站点（线上演示用的就是这条路径）
 
 ```bash
-# 发布（纯 REST，不需要 firebase CLI，也不需要交互式登录）
+# 纯 REST，不需要 firebase CLI，也不需要交互式登录
 python3 scripts/fb_deploy.py firebase/public
 ```
 
 > 为什么不用 `firebase deploy`：本机没装 CLI，且 CLI 需要一次交互式 OAuth；
-> 而 gcloud 已登录，直接用它的 access token 打 Hosting REST 接口更省事。
-> 脚本内联注释记录了三个踩过的坑（gzip 后取哈希、不能带 `Content-Encoding`、
-> 固定 `mtime=0` 保证压缩结果可复现）。
+> 而 gcloud 已登录，直接用它打 Hosting REST 接口更省事。脚本内联注释记录了三个踩过的坑
+> （gzip 后取哈希、不能带 `Content-Encoding`、固定 `mtime=0` 保证压缩结果可复现）。
 
-### 移植保真度
-
-不是靠人工核对，而是**差分测试**：
+### 配置模拟集群后端（Firestore）
 
 ```bash
-python3 scripts/diff_port.py            # 逐字段比对 Python 与 JS 的输出
-```
-
-覆盖 `analyze_batch` 全量输出、17 次工具调用（含越界、类型错误、未知工具等边界用例）、
-离线诊断文本。任一字段不一致都会打印出具体路径。
-
-## 部署到 Cloud Run（备选）
-
-> ⚠️ **两条部署路径，按账号情况二选一。**
->
-> - **路径 A（标准项目 + 结算）**——最直接：建一个 GCP 项目、启用结算，然后一条命令部署。
->   前提是账号已能绑定结算账号。
-> - **路径 B（Cloud Starter Tier）**——**免绑卡、免建项目**的零成本路径。官方原文：
->   *"Lets eligible accounts publish up to 2 full-stack applications without setting up a Google Cloud
->   project or billing account."* 代价是它只接受在 AI Studio **Build 模式**里由 agent 生成的应用
->   （React + Node），**不能直接部署本仓库的 Python / Flask 代码**。
->
-> 两条路的完整依据、Starter Tier 的资格条件、区域锁定规则与最短可行步骤，
-> 见 **[deploy/PREREQUISITES.md](deploy/PREREQUISITES.md)**。
-
-### 路径 A：一条命令
-
-```bash
-gcloud auth login                      # 浏览器交互
-./deploy/deploy.sh <PROJECT_ID>        # 幂等：检查 → 启用 API → 建仓库 → 部署 → 验证
-```
-
-脚本会依次做前置检查（登录 / 项目 / 结算）、启用所需 API、确保 Artifact Registry 仓库存在、
-挂载 Gemini 密钥、在云端构建并部署、最后自动 curl 验证。**不需要本地 Docker**。
-
-> 未配置密钥也能部署，但页面上的「AI 工具调用轨迹」会显示"离线模式未调用工具"——
-> 这会丢掉本项目最主要的差异化展示。建议先配密钥（见 `deploy/PREREQUISITES.md` 第 3 步）。
-
-### 路径 A'：手动分步
-
-```bash
-PROJECT_ID=你的项目ID
-REGION=asia-east1
-REPO=gpu-waste-auditor
-
-# 1. 构建并推送镜像
-gcloud artifacts repositories create $REPO --repository-format=docker --location=$REGION
-gcloud builds submit --tag $REGION-docker.pkg.dev/$PROJECT_ID/$REPO/gpu-waste-auditor:latest
-
-# 2. 把 API Key 存进 Secret Manager
-echo -n "你的Gemini密钥" | gcloud secrets create gemini-api-key --data-file=-
-
-# 3. 部署
-#    先替换 deploy/service.yaml 里的 PROJECT_ID 与 REPO 占位符
-gcloud run services replace deploy/service.yaml --region=$REGION
+python3 scripts/fb_firestore_setup.py check    # 只读检查：数据库是否存在、当前规则是什么
+python3 scripts/fb_firestore_setup.py rules    # 写入安全规则
+python3 scripts/fb_firestore_setup.py seed     # 重置种子数据（6 个节点 + 遥测历史）
+python3 scripts/fb_firestore_setup.py verify   # 读写一次，确认浏览器端匿名访问真的可用
 ```
 
 ## 工作原理
 
-线上形态（纯静态，无后端）：
-
 ```
-监控数据 → analyzer.js（确定性计算）→ 结构化审计结果
-                                        ↓
-                                ai.js（Gemini 工具调用循环）
-                                  ↕  query_metrics / estimate_carbon
-                                  ↕  simulate_defer / propose_action
-                                  ↑  Firebase AI Logic（浏览器直连）
-                                        ↓
-                Firebase Hosting → 指标卡 + 碳曲线 + 工具轨迹 + 决策清单
-```
-
-本地 / Cloud Run 形态（Python 参考实现）与此一一对应，只是把上图的 `.js` 换成 `.py`、
-把「浏览器直连 AI Logic」换成「Flask 服务端调用 Gemini」，输出完全一致（由差分测试保证）。
-
-**设计取舍**：所有数字由确定性代码算出，AI 只做「取数—推理—登记建议」。好处是数字可复算、可审计，
-不会出现「AI 编了个数」；同时模型不可用时也能降级演示。
-
-**AI 工具调用循环**（`ai.py::_agentic_diagnose` / `ai.js::agenticDiagnose`）：
-
-```
-模型 → 返回 functionCall → 本地执行工具 → 把结果回灌 → 模型 → … → 最终文本
-```
-
-最多 6 轮（`MAX_TOOL_TURNS`），一旦模型产出文本即结束。四个工具：
-
-| 工具 | 作用 |
-|---|---|
-| `query_metrics` | 按云 / 模式 / 金额排序取明细，模型拿到的数字只能来自这里 |
-| `estimate_carbon` | 给定电耗与时段，返回碳排与当日最优时段 |
-| `simulate_defer` | 把某节点负载从当前时段挪到低碳时段，测算减碳量与比例 |
-| `propose_action` | 登记一条可执行建议，前端据此渲染「接受 / 拒绝」 |
-
-### 浏览器端实现的两个坑（都写进了代码注释）
-
-**1. AI Logic 的官方 JS SDK 用不了。** SDK 的 `ChatSession` 把工具结果回传的角色写死为
-`role: "function"`，而新版模型已不接受这个角色：
-
-```
-400 Role 'function' is not supported. Please use a valid role:
-    SYSTEM, USER, ASSISTANT, DEVELOPER, CONTEXT, ... MODEL
+案例库（14 个，含三组成对对照）        模拟集群（Firestore，6 个节点）
+        │                                        │
+        ▼                                        ▼
+┌──────────────────────────────────────────────────────────────┐
+│  知识库层  kb.js                                             │
+│  24 条 Xid（逐条带官方文档 URL）｜27 条故障特征签名｜         │
+│  6 条诊断原则｜版本矩阵｜显存规格                            │
+└──────────────────────────────────────────────────────────────┘
+        │  工具只能从这里取事实；取不到就说「无记录，不得推测」
+        ▼
+┌──────────────────────────────────────────────────────────────┐
+│  工具层  tools.js（10 个工具，按模式裁剪：单次 6 / 值班 10）  │
+│  全部只返回**证据**，从不返回结论与分类                       │
+│  每次调用登记一个引用编号 T1 / T2 / …                        │
+└──────────────────────────────────────────────────────────────┘
+        │
+        ▼
+┌──────────────────────────────────────────────────────────────┐
+│  AI 层  ai.js —— 工具调用循环                                 │
+│   模型 ──functionCall──▶ 本地执行工具                         │
+│    ▲                        │                                │
+│    └──functionResponse──────┘   （最多 12 轮，MAX_TOOL_TURNS）│
+│  在线失败 → 降级为离线规则路径（如实标注，不假装跑过）        │
+└──────────────────────────────────────────────────────────────┘
+        │
+        ▼
+┌──────────────────────────────────────────────────────────────┐
+│  执行层  cluster.js（★ 只做低风险动作）+ actions.js（风险写死）│
+│  patchNode → 重新读回 → verified 判定 → 写操作日志            │
+│  中/高风险一律拒绝执行，并把模型引导去 propose_fix 走人工审批 │
+└──────────────────────────────────────────────────────────────┘
+        │
+        ▼
+  纯静态前端（Firebase Hosting）→ 结论卡 + 证据包 + 工具轨迹 + 处置清单/审批 + 执行包
 ```
 
-改用 `role: "user"` 回传本来是对的，却又被 SDK 的客户端校验拦住
-（`Content with role 'user' can't contain 'functionResponse' part`）。
-两条路都堵死 —— 所以 `ai.js` 直接打 REST，自己控制 `contents` 的角色。
-顺带去掉了 150KB 的 SDK 依赖。
+**核心口径**：所有事实由 `kb.js` / `triage.js` 确定性给出，AI 只做**取证、推断、登记**。
+四个好处：
 
-**2. 鉴权只能用 header `x-goog-api-key`。** 用查询参数 `?key=` 会被边缘直接返回
-HTML 400，看起来像「模型不存在」，极易误判成模型下线。已被这个假象误导过一次。
+1. 数字可复算、可审计，不会出现「AI 编了个数」；
+2. 模型不可用时系统仍能完整演示（降级为规则路径，且同样产出结构化建议）；
+3. 技术评审时能清楚说明哪部分是模型能力、哪部分是工程确定性；
+4. 模型拿到的每个数字都能追溯到某次工具调用的返回值 —— 前端把轨迹直接展示出来，可现场验证。
 
-**模型降级链**：免费层每个模型的日配额独立且有限，所以按
+### 工具调用循环（为什么这是「生成式 AI 实现」而不是套壳）
+
+```
+contents = [提示词]
+loop（最多 MAX_TOOL_TURNS = 12 轮）:
+    resp = Gemini(contents, tools=[本模式的 functionDeclarations])
+    若含 functionCall:
+        contents += [模型回合]          # 原样回传，保住思考模型的 thoughtSignature
+        contents += [工具执行结果]      # 角色是 user，见下
+        continue
+    若含文本: return 文本 + 累计的 tool_calls
+```
+
+**★ 一轮 ≠ 一次调用。** 模型可以在一轮里并行发多个 `functionCall`
+（实测它会一次发 4 个 `inspect_node` 逐个节点取证），所以 12 对应的是「来回次数」。
+
+**模型降级链**：免费层每个模型的日配额独立，所以按
 `gemini-3.5-flash-lite → gemini-3.5-flash → gemini-3.1-flash-lite → gemini-3.8-flash`
-依次尝试。区分两种 429：短时限流就等一下重试同一个模型；当日配额耗尽（响应里会写
-`retry in 18h44m`）则立刻换模型——否则界面会挂十几个小时。换模型的原因会如实显示在界面上。
+依次尝试。代码区分两种 429：短时限流就等一下重试同一个模型；当日配额耗尽
+（响应里会写 `retry in 18h44m`）则**立刻换模型** —— 否则界面会挂十几个小时。
+换模型的原因会如实显示在界面上。
 
-**核心口径**（完整假设见 [docs/architecture.md](docs/architecture.md)）：
+### 工具清单
 
-```
-浪费卡时 = max(申请卡数 − 使用卡数, 0) × 时长
-         + 使用卡数 × 时长 × (1 − 平均利用率)      [仅当利用率 < 30%]
-浪费电耗 = 浪费卡时 × 单卡 TDP × 0.25
-浪费电费 = 浪费电耗 × ¥0.70/kWh
-浪费碳排 = 浪费电耗 × 0.581 kgCO₂e/kWh × 时段系数 × 区域系数
-```
-
-## API
-
-| 方法 | 路径 | 说明 |
+| 工具 | 模式 | 作用 |
 |---|---|---|
-| GET | `/` | Web 界面 |
-| GET | `/healthz` | 健康检查，返回 `{"status":"ok"}` |
-| GET | `/api/sample` | 返回脱敏示例数据 |
-| GET | `/api/carbon-profile` | 全天电网碳强度曲线（24 点相对系数）与最优/最差时段 |
-| POST | `/api/analyze` | 传入 `{"records":[...], "window":"..."}` 做审计；不传 records 则使用示例数据。返回汇总、明细、碳曲线与 AI 决策 |
+| `search_failure_signature` | 分诊 | 在 27 条故障特征库里检索已知模式（返回候选，不是结论） |
+| `lookup_xid` | 分诊 | 查 Xid 码的权威含义、故障归类与推荐处置 |
+| `check_compat` | 分诊 | 校验 driver / CUDA / torch / NCCL 版本栈是否自洽 |
+| `estimate_memory` | 分诊 | 核算训练显存需求，给出 comfortable / tight / will_oom |
+| `inspect_node` | 分诊 | 拉取节点遥测：Xid 事件序列、ECC、降频、PCIe、近 30 天历史 |
+| `propose_fix` | 分诊 | 登记一条修复建议（传 `action_id`；风险等级由库决定） |
+| `scan_cluster` | 值班 | 主动巡检整个集群，返回需要注意的节点清单（**现象**，不是分类） |
+| `execute_action` | 值班 | 执行动作。**只有低风险会被真正执行**，中/高风险返回「需要人工审批」 |
+| `draft_ticket` | 值班 | 为高风险动作备一张工单草稿（**不提交**） |
+| `notify_operator` | 值班 | 把结论与待办推给值班人 |
 
-`/api/analyze` 返回结构中与 AI 相关的字段：
+**★ 工具清单按模式裁剪（`toolSpecsFor(mode)`）。** 单次分诊根本没有连集群，
+所以 `scan_cluster` / `execute_action` / `draft_ticket` / `notify_operator` 这四个
+不但没用，还会**让模型白调一次**、拿回一句「当前会话没有连接集群」，
+在调用轨迹上留下一行看着像故障的记录。**给模型一把开不了门的钥匙，责任在设计，不在模型。**
 
-```json
-{
-  "ai": {
-    "mode": "gemini | offline | fallback",
-    "model": "gemini-3.8-flash",
-    "text": "模型生成的诊断文本",
-    "tool_calls": [{"name": "query_metrics", "args": {...}}],
-    "actions": [{
-      "id": "A1",
-      "title": "空转节点自动回收",
-      "expected_cost_recovery_cny": 68307.0,
-      "expected_carbon_reduction_kg": 266.9,
-      "effort": "中"
-    }]
-  },
-  "carbon_profile": {"hourly_factor": [24 个相对系数], "best_hour": 13, "worst_hour": 19},
-  "carbon_peak": {"best_hour": 13, "worst_hour": 19}
-}
-```
+## 安全边界（说清楚才可信）
 
-请求示例：
+**1. 不接入任何真实生产集群。**
+分诊用的案例是构造的，值班用的节点是模拟的。真实的腾讯云 / 阿里云 / 百度云 / 智星云集群
+与 Google Cloud 之间**没有网络通路**，从架构上也够不着。被迁移的只是方法论，不是数据。
 
-```bash
-curl -s -X POST http://127.0.0.1:8080/api/analyze \
-  -H 'Content-Type: application/json' -d '{}' | python3 -m json.tool
-```
+**2. Agent 能自主执行的只有低风险动作。**
+6 条低风险 / 5 条中风险 / 3 条高风险。低风险的定义是「只影响当前任务进程、可逆、不碰硬件与系统」
+（比如 cordon —— 只挡新任务，**不打断任何正在运行的任务**）。
+`drain_node` 会赶人、`reboot_node` 会杀掉别人跑了一周的任务，都是中风险，模型无权执行。
+
+**3. 审批门槛写在代码里，不写在提示词里。**
+提示词是**可以被说服的** —— 模型只要「认为」某件事风险不高就可能绕过它。
+所以门槛是代码：`execute_action` 里 `if (act.risk !== 'low') return 拒绝`，
+且这个检查**排在「有没有连接集群」之前** —— 审批是规则，规则必须先说。
+
+**4. 报修只建草稿，不提交。**
+`file_rma` 是高风险：走一次 RMA，集群就少一块卡。Agent 把工单准备到
+「人只需要点确认」的程度（证据、命令、判断依据全填好），但**不替你提交**。
+草稿里 `approved` / `ticket_no` / `approver` 三个字段只能由人填写 —— 那是人签字的痕迹。
+
+**5. Firestore 规则是匿名可读写（这是明确的安全边界，不是疏漏）。**
+浏览器端没有登录流程，所以演示环境只能这样 —— **生产部署必须换成基于 Auth 的规则**。
+开放面被规则锁死在 4 个集合内（`cluster` / `events` / `tickets` / `notifications`），
+其余路径一律拒绝，所以即使被滥用也不会波及项目里的其它数据。
+
+**6. 前端持有 Firebase Web API Key（这是 Firebase 的既有设计，非疏漏）。**
+该 Key 本就公开出现在任何 Firebase 网页的源码里，真正的保护是安全规则与 App Check。
+当前 **App Check 尚未强制**（Firebase 计划 2026-11-02 起对 AI Logic 强制），
+也就是说现阶段他人在理论上可以复用该配额。届时通过请求头附加 App Check token 即可闭合，
+业务逻辑无需改动。这是已识别、有明确收敛动作的边界。
+
+**7. 「主动」在演示里的真实含义。**
+本应用是纯静态站点，没有常驻进程。所以值班巡检是**由人点一下开始、之后自动跑完**的循环。
+真实部署应由 Cloud Scheduler 之类定时触发 —— **这一点在界面上写清楚了，不假装有常驻服务。**
+同理，通知落到 `notifications` 集合、状态保持 `queued`，不假装它已经发到你的 IM 了。
 
 ## 目录结构
 
 ```
 .
-├── README.md                     中文版说明（本文件）
-├── README.en.md                  English README
-├── LICENSE
-├── Dockerfile                    Cloud Run 构建入口
-├── requirements.txt
-├── .env.example                  环境变量模板（.env 不提交）
-├── src/
-│   ├── app.py                    Flask 入口与 API
-│   ├── analyzer.py               浪费识别与折算（纯计算，可单测）
-│   ├── carbon.py                 电网碳强度时段模型（碳感知调度依据）
-│   ├── tools.py                  AI 可调用的四个工具 + 工具会话状态
-│   ├── ai.py                     Gemini 工具调用循环与离线降级
-│   ├── prompts/diagnose.md       诊断提示词模板
-│   └── templates/index.html      Web 界面（指标卡 / 碳曲线 / 工具轨迹 / 决策清单）
-├── data/sample_metrics.json      脱敏示例数据
-├── tests/
-│   ├── test_analyzer.py          计算层测试
-│   ├── test_carbon.py            碳强度模型测试
-│   ├── test_tools.py             工具与分发测试
-│   └── test_ai.py                AI 层与离线降级测试
-├── firebase/public/              ★ 线上部署的纯静态站点
-│   ├── index.html                页面骨架（指标卡 / 碳曲线 / 工具轨迹 / 决策清单）
-│   ├── styles.css
-│   ├── js/analyzer.js            浪费识别与折算
-│   ├── js/carbon.js              电网碳强度时段模型
-│   ├── js/tools.js               四个工具 + 分发
-│   ├── js/ai.js                  AI Logic 工具调用循环与离线降级
-│   ├── js/prompt.js              诊断提示词模板
-│   ├── js/app.js                 界面装配
-│   └── data/sample.json          浏览器侧读取的示例数据
-├── scripts/run_local.sh          本地一键启动
-├── scripts/fb_deploy.py          发布静态站点到 Firebase Hosting（纯 REST）
-├── scripts/diff_port.py          差分测试：Python 参考实现 vs JS 移植版
-├── scripts/probe_*.py            摸清 AI Logic 行为的一次性探针脚本
-├── deploy/
-│   ├── deploy.sh                 部署到 Cloud Run 的一键幂等脚本
-│   ├── PREREQUISITES.md          部署前置条件清单
-│   └── service.yaml              Cloud Run 服务定义（声明式替代方案）
+├── README.md / README.en.md      中英文说明
+├── LICENSE                       MIT
+├── firebase/
+│   ├── package.json              只让 Node 把 js/ 当 ES 模块加载；浏览器不读它
+│   └── public/                   ★ 线上部署的纯静态站点（无构建步骤）
+│       ├── index.html            页面骨架（四个标签页）
+│       ├── styles.css
+│       └── js/
+│           ├── kb.js             知识库：24 条 Xid + 27 条特征 + 6 条诊断原则 + 版本矩阵
+│           ├── triage.js         确定性预分析：Xid 提取 / 特征匹配 / 版本自检 / 显存核算
+│           ├── tools.js          10 个工具 + 参数白名单 + 按模式裁剪
+│           ├── actions.js        修复动作库（风险等级写死）+ 审批流 + 执行包生成
+│           ├── cluster.js        模拟集群客户端：执行 → 回读 → 回验 → 写操作日志
+│           ├── prompt.js         提示词（按模式生成硬约束）
+│           ├── ai.js             AI 层：工具调用循环 + 降级链 + 续跑 + 离线兜底
+│           ├── app.js            界面装配
+│           └── data/
+│               ├── cases.json            14 个案例（含三组成对对照）
+│               └── cluster_seed.json     6 个模拟节点 + 遥测历史
+├── scripts/
+│   ├── verify_triage.mjs         不变量校验 + F8 基准（离线，不消耗配额）
+│   ├── verify_pipeline.mjs       端到端契约测试：桩 fetch + 内存假集群（离线）
+│   ├── browser_check.mjs         真 Chrome + 真 Firestore 的端到端验收
+│   ├── record_demo.mjs           演示视频录制：按分镜检查真的走一遍线上站点，产出帧序列 + 时间轴
+│   ├── demo_voice.py             英语旁白：逐拍合成、量时长、贴合时间窗，拼成整条音轨
+│   ├── demo_caption.py           烧中英双语硬字幕 + 进度条 + 混入旁白，编码成 mp4
+│   ├── capture_shots.mjs         采集 deck 用的整页读数截图（`--boxes` 同时量出元素几何，供裁图用）
+│   ├── fb_deploy.py              发布到 Firebase Hosting（纯 REST）
+│   ├── fb_firestore_setup.py     模拟集群后端：check / rules / seed / verify
+│   └── probes/                   摸清 AI Logic 行为的一次性探针脚本
+├── shots/                        deck 用的整页读数截图（对着线上站点实采，两组）
+│   ├── clean/                    刚重置的界面：集群整卡、节点行、风险块、基准表
+│   ├── shift/                    跑完一次值班之后：操作日志非空、单次分诊真跑过模型
+│   └── */boxes.json              同一次截图会话里量出的元素几何，供裁图用（不手写坐标）
+├── deck/
+│   ├── slides/01..14.slide       幻灯片 DSL 源（三区母版 1280×720）
+│   ├── assets/                   deck 里用到的 7 张裁图（由 make_crops.py 重出）
+│   ├── make_crops.py             从 shots/ 裁图：几何读 boxes.json，图框读 slides/
+│   ├── make_pdf.py               render/*.png → ../docs/…deck.pdf（白底 + 150dpi）
+│   ├── DESIGN.md / STORY.md      版式依据与逐页大纲
+│   └── Training-Failure-Triage.pptx   deck 的可编辑形式
 └── docs/
-    ├── architecture.md           架构与完整计算口径
-    ├── architecture.en.md        Architecture and calculation basis (English)
-    ├── demo-script.md            3 分钟演示视频分镜
-    └── demo-script.en.md         Demo video storyboard (English)
+    ├── architecture.md           架构与完整设计依据
+    ├── architecture.en.md        Architecture (English)
+    ├── scenarios.md              适用场景与功能规格（中文）
+    ├── demo-script.md            3 分钟演示视频分镜 + 录制/合成说明
+    ├── demo-script.en.md         Demo video storyboard (English)
+    ├── Training-Failure-Triage-deck.pdf      方案说明 deck（14 页）
+    └── Training-Failure-Triage-demo.mp4      演示视频成片
 ```
+
+> `shots-demo/`（录制的帧序列、逐拍音频与 `timeline.json`）里的**帧序列不进仓库** —— 几万张帧图，
+> 体积不值得；`timeline.json`、`beats.json` 与 `voice.m4a` 留在仓库里，它们才说明成片是怎么来的。
+>
+> **deck 里的截图与版式都是可重建的**，不是贴上去的成品图：`shots/` 是 `scripts/capture_shots.mjs`
+> 对着线上站点实采的整页截图，`deck/make_crops.py` 从里面裁出 7 张证据图，`deck/make_pdf.py`
+> 把 14 张页图合成 PDF。**裁哪一块不手写坐标** —— 几何来自同一次截图会话量出的 `boxes.json`，
+> 图框尺寸反过来从 `slides/*.slide` 读。上一版手写的 6 组坐标在一次界面改版后全部失效，
+> 而且不报错（数字还是那些数字，元素全挪了位置，照旧坐标裁出来的图会切在半个面板上）。
+>
+> `shots/` 分两组，是因为**同一时刻界面只有一个状态**：`clean/` 是刚重置的样子（集群整卡、
+> 节点行、风险块、基准表要的是这个），`shift/` 是跑完一次值班之后（操作日志才非空，
+> 单次分诊才真跑过模型）。拿巡检后的状态去配「页面加载时的样子」，图与话就对不上了。
+>
+> `deck/render/`（14 张 1920×1080 页图）与 `deck/.slidep/`（工具状态）不进仓库 —— 都能从 DSL 重跑。
 
 ## 提交物清单
 
 - [x] **公开** GitHub 仓库（本仓库）
-- [ ] 可访问的已部署原型链接（Cloud Run）
-- [ ] 演示视频（**少于 3 分钟**）— 分镜见 [docs/demo-script.md](docs/demo-script.md)
-- [ ] 方案说明 deck
+- [x] 可访问的已部署原型链接 —— <https://gpu-waste-auditor-2026.web.app>
+- [x] 演示视频（**少于 3 分钟**）— 成片 [docs/Training-Failure-Triage-demo.mp4](docs/Training-Failure-Triage-demo.mp4)，
+      分镜与录制/合成说明见 [docs/demo-script.md](docs/demo-script.md)
+- [x] 方案说明 deck — [docs/Training-Failure-Triage-deck.pdf](docs/Training-Failure-Triage-deck.pdf)（14 页）
 - [x] 代码为赛期内新做
-- [x] 英文版文档（[README.en.md](README.en.md)、[architecture.en.md](docs/architecture.en.md)、[demo-script.en.md](docs/demo-script.en.md)）——面向 JAPAC 国际评审
+- [x] 英文版文档（[README.en.md](README.en.md)、[architecture.en.md](docs/architecture.en.md)、[demo-script.en.md](docs/demo-script.en.md)）—— 面向 JAPAC 国际评审
 
 ## 已知限制与不确定项
 
-1. **能耗是近似值**：用 `TDP × 0.25` 估算空转功耗，非实测。接入 DCGM/IPMI 功耗读数后可替换为实测曲线。
-2. **利用率按周期平均**，会掩盖「前 80% 满载、后 20% 空转」的分布问题。
-3. **未做任务级归因**：知道哪个节点浪费，不知道是哪个任务造成。
-4. **电价仍为常量**：真实账单是阶梯电价。碳排已按**时段**区分（24 点相对曲线），并支持**区域**系数；
-   但时段曲线与区域系数是公开资料的**简化近似，不是实测数据**，接入 Electricity Maps 等真实碳强度源后方可作调度依据。
-5. **碳感知调度假设负载可平移**：对训练任务而言，只有具备 checkpoint 续训能力的任务才真正可延后；
-   本项目把「可延后性」作为待补数据列出，没有擅自假设所有任务都能挪时段。
-6. 卡时单价为估算值，需按实际采购/租赁台账校准。
-7. **免费层配额是演示期最硬的约束**（2026-10-14 实测，非估算）：
-   - 每个模型有**独立的日配额**，且很小 —— `gemini-3.8-flash` 实测为 **20 次/天/项目**，
-     耗尽后返回 `429 ... retry in 18h44m`（按太平洋时间零点重置）。此外还有每分钟请求数限制。
-   - 因此实现了**模型降级链**：`gemini-3.5-flash-lite → gemini-3.5-flash → gemini-3.1-flash-lite
-     → gemini-3.8-flash`。代码区分两种 429 —— 短时限流就等一下重试同一个模型；
-     当日配额耗尽则**立刻换模型**（否则界面会挂十几个小时）。换模型的原因会如实显示在界面上。
-   - 实测一次完整分析（11 次工具调用）约 9 秒；单个模型当日约可支撑 40+ 次演示。
-8. **前端持有 Firebase Web API Key（这是 Firebase 的既有设计，非疏漏）**：
-   该 Key 本就公开出现在任何 Firebase 网页的源码里，真正的保护是安全规则与 App Check。
-   当前 **App Check 尚未强制**（Firebase 计划 2026-11-02 起对 AI Logic 强制），
-   也就是说现阶段他人在理论上可以复用该配额。届时通过请求头附加 App Check token 即可闭合，
-   业务逻辑无需改动。这是已识别、有明确收敛动作的边界。
-9. **AI Logic 的官方 JS SDK 未被采用**，原因是它在工具调用的多回合场景下有硬缺陷
-   （角色写死为 `function`，且客户端校验阻止改用 `user`）。详见「工作原理」一节。
-   代价是需自行处理鉴权与超时，收益是能与 Python 参考实现保持 1:1 并去掉 150KB 依赖。
+1. **知识库只覆盖 24 条 Xid 与 27 条特征签名**，不是全部 100+ 个 Xid 码。
+   这不是偷懒，是设计：**知识库的边界就是模型的能力边界** —— 查不到时工具返回
+   「无记录，不得推测」，提示词也明确要求如实说不知道。编一个听起来合理的解释，
+   比直接说「不知道」糟糕得多，因为运维会照着它去动生产环境。
+2. **AI 分诊的准确率不是我们自己声明的**，由页面上跑满 14 个案例后自动统计。
+   未跑满时显示为空 —— 未跑出的成绩不会出现在任何地方。
+   规则基线 **11/14** 是可当场复现的（本地秒出、不耗配额）。
+3. **修复动作的命令按通用工具口径给出**（`nvidia-smi` / `dmesg` / `modprobe` / `kubectl`），
+   不绑定某一种调度器。凡涉及集群平台的部分都在 `note` 里写明「按你的平台替换」，
+   含 `<尖括号>` 的是待替换参数。**宁可写清楚要替换，也不假装一条命令能通吃所有集群。**
+4. **执行包不含任何自动执行能力**：命令需要人工复制到目标节点执行。
+   这是刻意的 —— 一份执行包里最危险的东西不是写错的命令，而是**没被批准却被执行**的命令。
+   所以没有回滚方案的动作不允许进执行包，未获批准的动作明确标注「未批准，请勿执行」。
+5. **免费层配额是演示期最硬的约束**：
+
+   | 项目 | 数值 | 口径 |
+   |---|---|---|
+   | 一次巡检消耗的模型请求 | **12–16 次** | **按轮次折算**（一轮工具调用一次请求；模型并行出调用会少一些）。不是拿配额计数器直接读的 |
+   | 撞上轮次上限触发续跑时 | 再追加一批 | `ai.js` 的 `MAX_RESUMES = 2`，最多续两次 |
+   | 单个模型的免费日配额 | 约 **20 次/模型/天** | 实测（2026-10-14） |
+   | 换算 | 一天大约够跑 **5–6 次巡检** | 由上面两行推算 |
+   | 一次完整巡检耗时 | 顺利时 **15–40 秒**；撞上上游 500 触发续跑时可能到 **90–120 秒** | 实测 |
+
+   单次分诊**有本地缓存**：命中缓存零请求、零等待，演示当天不受配额影响。
+   值班巡检没有缓存（它每次都要真的跑）—— 这一点写进了录制前检查清单。
+
+6. **上游偶发 5xx 会导致「续跑」而不是「重来」**，但有上限（`MAX_RESUMES = 2`）。
+   续跑会把已完成的工具调用带到下一个模型上接着跑，界面上会显示
+   「上游失败过一次，已带进度续跑」。连续失败超过上限仍会降级到规则路径。
+7. **AI Logic 的官方 JS SDK 未被采用**，原因是它在工具调用的多回合场景下有硬缺陷
+   （SDK 把工具结果回传的角色写死为 `function`，而新版模型已不接受；改用 `user` 又被
+   SDK 自己的客户端校验拦住）。详见 [docs/architecture.md](docs/architecture.md) 第 3 节。
+   代价是需自行处理鉴权与超时，收益是能完全控制 `contents` 的角色、并去掉 150KB 依赖。
+8. **界面与提示词目前是简体中文**，API 层面无影响（这是纯前端应用，没有对外 API）。
+   英文 UI 是明确的后续项，本文档不声称已经做了。
 
 以上限制在技术评审环节会被问到，本文档直接列为已知边界而非回避。
 

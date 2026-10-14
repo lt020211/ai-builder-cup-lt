@@ -1,0 +1,61 @@
+// 12 · 11 / 14，而且你可以自己重跑 —— 左侧巨型数字 + 右侧全表
+const FONT = 'Inter, "Helvetica Neue", Arial, sans-serif';
+const MONO = '"JetBrains Mono", "SF Mono", Menlo, monospace';
+const INK = '#0B1220';
+const BLUE = '#2F6BFF';
+const RED = '#E5484D';
+const DIM = '#64748B';
+const BODY = '#1A2434';
+
+const MISSES = [
+    { id: 'case-xid48-dbe', why: 'a rising correctable-ECC trend read as an application bug' },
+    { id: 'case-xid94-rising', why: 'the pair that needs the 30-day window, not the code' },
+    { id: 'case-gpu-hang-deadlock', why: 'a secondary hang taken for the root cause' },
+];
+
+<Slide style={{ width: 1280, height: 720, padding: '18px 72px', background: '#FFFFFF', fontFamily: FONT }}>
+    <Box style={{ width: 1136, height: 92, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end' }}>
+        <Text style={{ fontSize: 34, fontWeight: 700, color: INK, lineHeight: 1.3 }}>11 / 14, and you can rerun it</Text>
+        <Text style={{ fontFamily: MONO, fontSize: 14, color: DIM, lineHeight: 1.45 }}>Rule baseline · offline · zero model calls</Text>
+    </Box>
+
+    <Box style={{ width: 1136, height: 544, flexDirection: 'row', gap: 24 }}>
+
+        <Box style={{ width: 452 }}>
+            <Text style={{ fontFamily: MONO, fontSize: 104, fontWeight: 700, color: INK, lineHeight: 1 }}>11 / <span style={{ color: RED }}>14</span></Text>
+            <Text style={{ fontFamily: MONO, fontSize: 16, color: DIM, lineHeight: 1.5, marginTop: 8 }}>78.6% · classification only</Text>
+
+            <Box style={{ width: 452, height: 1, background: '#E6EBF3', marginTop: 16, marginBottom: 14 }} />
+
+            <Text style={{ fontSize: 16, fontWeight: 600, color: INK, lineHeight: 1.45 }}>The three it gets wrong</Text>
+            {MISSES.map((m, i) => (
+                <Box key={i} style={{ marginTop: 12, width: 452 }}>
+                    <Text style={{ fontFamily: MONO, fontSize: 13, color: BLUE, lineHeight: 1.5 }}>{m.id}</Text>
+                    <Text style={{ fontSize: 14, color: BODY, lineHeight: 1.5 }}>{m.why}</Text>
+                </Box>
+            ))}
+
+            <Text style={{ fontSize: 13, color: DIM, lineHeight: 1.6, marginTop: 16, width: 452 }}>
+                The baseline does two things only: vote over pre-analysis hits, and “hardware means file an RMA”.
+            </Text>
+        </Box>
+
+        <Box style={{ width: 660, alignItems: 'center', justifyContent: 'center' }}>
+            {/* 图片框改成 660×400（原 660×470）。
+                这张表在新界面里是 1118×594（比例 1.88）；旧框比例 1.40 比它更扁，
+                按比例只能往下补高 —— 补出来会把表格下面那块面板一起框进来。
+                挪到 400 之后框刚好包住表 + 一点面板内边距，图上没有多余的东西。 */}
+            <Image src='assets/crop-bench-table.png' style={{ width: 660, height: 400, border: '1px solid #E9EDF4' }} />
+            <Text style={{ fontSize: 13, color: DIM, lineHeight: 1.5, marginTop: 10, width: 660 }}>
+                Same case library, same scoring script. The AI column is blank wherever we did not run the AI,
+                because a blank is the honest value there.
+            </Text>
+        </Box>
+
+    </Box>
+
+    <Box style={{ width: 1136, height: 48, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+        <Text style={{ fontSize: 14, color: DIM }}>Reproduced by scripts/verify_triage.mjs — the page and the script share one code path</Text>
+        <Text style={{ fontFamily: MONO, fontSize: 14, color: DIM }}>12 / 14</Text>
+    </Box>
+</Slide>

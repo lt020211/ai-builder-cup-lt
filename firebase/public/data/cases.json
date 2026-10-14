@@ -1,0 +1,884 @@
+{
+  "meta": {
+    "note": "演示案例集。所有报错文本、版本号组合与遥测字段均按真实生产环境的形态构造：报错原文取自常见框架输出格式，Xid 语义与处置建议来自公开权威资料（见 js/kb.js 中每条 source）。节点名与用户名为演示用标识。",
+    "telemetry_note": "node_telemetry 的字段语义对齐 nvidia-smi / DCGM 的常见口径，但数值为演示数据。每个案例在页面上都会显式标注「遥测为演示数据」，避免与真实监控混淆。 驱动掉线与 GPU 卡死两组案例均成对设计，用于演示「症状相同、根因相反」的判别。",
+    "count": 14
+  },
+  "cases": [
+    {
+      "id": "case-oom-batch",
+      "title": "调大 microbatch 后直接 OOM",
+      "subtitle": "70B 全参 SFT ｜ 32 卡（4 机 × 8） ｜ microbatch 2 → 4",
+      "evidence": {
+        "reported_at": "2026-10-12T14:38:07+08:00",
+        "job": {
+          "name": "llama70b-sft-v3",
+          "user": "zhangwei",
+          "node": "lyg2061",
+          "gpu_count": 32,
+          "gpu_type": "H800",
+          "start_hour": 13,
+          "runtime_hours": 0.4,
+          "status": "failed"
+        },
+        "command": "torchrun --nnodes=4 --nproc_per_node=8 train_sft.py --model llama-70b --micro-batch 4 --seq-len 2048 --tp 8 --dp 4 --zero 3",
+        "stderr_excerpt": "torch.cuda.OutOfMemoryError: CUDA out of memory. Tried to allocate 2.40 GiB. GPU 0 has a total capacity of 79.11 GiB of which 1.86 GiB is free. Process 18422 has 76.92 GiB memory in use. Of the allocated memory 74.10 GiB is allocated by PyTorch, and 1.42 GiB is reserved by PyTorch but unallocated. See documentation for Memory Management and PYTORCH_CUDA_ALLOC_CONF",
+        "docker_image": "registry.local/pytorch:2.4.1-cu124-nccl2.21",
+        "environment": {
+          "driver": "550.54.14",
+          "cuda_runtime": "12.4",
+          "torch": "2.4.1+cu124",
+          "nccl": "2.21.5",
+          "python": "3.11.9"
+        },
+        "training_config": {
+          "model_params_b": 70,
+          "precision": "bf16",
+          "batch_size": 4,
+          "seq_len": 2048,
+          "hidden_size": 8192,
+          "num_layers": 80,
+          "tp": 8,
+          "dp": 4,
+          "zero_stage": 3,
+          "recompute": false,
+          "flash_attn": true,
+          "gpu_type": "H800"
+        },
+        "node_telemetry": {
+          "window": "13:30-14:40",
+          "xid_events": [],
+          "ecc_uncorrectable": 0,
+          "ecc_correctable": 12,
+          "clock_throttle": "none",
+          "note": "该时段无任何硬件事件；12 次可纠正 ECC 属该节点长期基线水平"
+        }
+      },
+      "expected": {
+        "class": "config",
+        "root_cause": "microbatch 提到 4 后激活值超出单卡容量，属资源配置问题；硬件侧完全干净",
+        "should_rma": false,
+      "key_tool": "estimate_memory",
+      "trap": "★ 最容易被判成「显存不够，这张卡不行了」。但同一张卡在更小 batch 下能跑通——判别依据是「同一张卡在两种配置下的表现差」，而不是 OOM 报错本身。改配置即可，不该动硬件"
+    }
+    },
+    {
+      "id": "case-oom-fragmentation",
+      "title": "显存「还够」却分配失败",
+      "subtitle": "13B 训练 ｜ 长跑 7 小时后报 OOM",
+      "evidence": {
+        "reported_at": "2026-10-12T21:04:51+08:00",
+        "job": {
+          "name": "qwen13b-pretrain",
+          "user": "liuyang",
+          "node": "lyg2107",
+          "gpu_count": 8,
+          "gpu_type": "A800",
+          "start_hour": 14,
+          "runtime_hours": 7.1,
+          "status": "failed"
+        },
+        "command": "torchrun --nproc_per_node=8 train.py --model qwen-13b --micro-batch 8 --seq-len 4096 --tp 2 --dp 4 --zero 2",
+        "stderr_excerpt": "torch.cuda.OutOfMemoryError: CUDA out of memory. Tried to allocate 1.20 GiB. GPU 0 has a total capacity of 79.11 GiB of which 2.10 GiB is free. Process 22771 has 77.01 GiB memory in use. Of the allocated memory 71.20 GiB is allocated by PyTorch, and 5.81 GiB is reserved by PyTorch but unallocated. If reserved but unallocated memory is large try setting PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True to avoid fragmentation.",
+        "docker_image": "registry.local/pytorch:2.4.1-cu124-nccl2.21",
+        "environment": {
+          "driver": "550.54.14",
+          "cuda_runtime": "12.4",
+          "torch": "2.4.1+cu124",
+          "nccl": "2.21.5",
+          "python": "3.11.9"
+        },
+        "training_config": {
+          "model_params_b": 13,
+          "precision": "bf16",
+          "batch_size": 8,
+          "seq_len": 4096,
+          "hidden_size": 5120,
+          "num_layers": 40,
+          "tp": 2,
+          "dp": 4,
+          "zero_stage": 2,
+          "recompute": false,
+          "flash_attn": true,
+          "gpu_type": "A800"
+        },
+        "node_telemetry": {
+          "window": "14:00-21:10",
+          "xid_events": [],
+          "ecc_uncorrectable": 0,
+          "ecc_correctable": 9,
+          "clock_throttle": "none",
+          "note": "无硬件事件；长跑期间显存池碎片随时间累积"
+        }
+      },
+      "expected": {
+        "class": "config",
+        "root_cause": "已保留但未分配的显存有 5.81 GiB，却凑不出 1.20 GiB 连续空间——典型内存碎片，不是显存总量不足",
+        "should_rma": false,
+      "key_tool": "search_failure_signature",
+      "trap": "★ 与上一个案例同为 OOM，但根因不同：一个是总量不足、一个是碎片。两者都改配置就能解决、都不该动硬件，但**改的参数不是同一个**——把两个 OOM 当同一件事处理，就会改错参数"
+    }
+    },
+    {
+      "id": "case-nccl-nvlink",
+      "title": "集合通信卡死 10 分钟",
+      "subtitle": "7B 微调 ｜ ALLREDUCE 超时 ｜ 节点同时段有 NVLink 事件",
+      "evidence": {
+        "reported_at": "2026-10-11T02:58:33+08:00",
+        "job": {
+          "name": "qwen7b-lora",
+          "user": "chenyu",
+          "node": "lyg2061",
+          "gpu_count": 8,
+          "gpu_type": "H800",
+          "start_hour": 1,
+          "runtime_hours": 1.9,
+          "status": "failed"
+        },
+        "command": "torchrun --nproc_per_node=8 finetune.py --model qwen-7b --micro-batch 8 --seq-len 4096 --tp 2 --dp 4 --zero 2",
+        "stderr_excerpt": "[rank 3] Watchdog caught collective operation timeout: WorkNCCL(SeqNum=1842, OpType=ALLREDUCE, NumelIn=8388608, NumelOut=8388608, Timeout(ms)=600000) ran for 600512 milliseconds before timing out.\n[rank 3] Exception raised from checkTimeout at ProcessGroupNCCL.cpp:1389\n[rank 3] NCCL error: unhandled system error\n[rank 0] ProcessGroupNCCL is being terminated due to watchdog thread timeout",
+        "docker_image": "registry.local/pytorch:2.4.1-cu124-nccl2.21",
+        "environment": {
+          "driver": "550.54.14",
+          "cuda_runtime": "12.4",
+          "torch": "2.4.1+cu124",
+          "nccl": "2.21.5",
+          "python": "3.11.9"
+        },
+        "training_config": {
+          "model_params_b": 7,
+          "precision": "bf16",
+          "batch_size": 8,
+          "seq_len": 4096,
+          "hidden_size": 3584,
+          "num_layers": 28,
+          "tp": 2,
+          "dp": 4,
+          "zero_stage": 2,
+          "recompute": false,
+          "flash_attn": true,
+          "gpu_type": "H800"
+        },
+        "node_telemetry": {
+          "window": "01:00-03:00",
+          "xid_events": [
+            {
+              "code": 74,
+              "count": 3,
+              "first_at": "02:41",
+              "last_at": "02:52",
+              "pci": "0000:3b:00"
+            }
+          ],
+          "ecc_uncorrectable": 0,
+          "ecc_correctable": 6,
+          "clock_throttle": "none",
+          "note": "NVLink 异常在超时前 7 分钟已开始出现，链路两端需一并检查"
+        }
+      },
+      "expected": {
+        "class": "network",
+        "root_cause": "NCCL 超时是次生现象——同一时段已有 Xid 74（NVLink 异常），根因在链路而非通信配置",
+        "should_rma": false,
+        "key_tool": "inspect_node",
+        "trap": "调大 NCCL_TIMEOUT 会掩盖问题而不是解决它"
+      }
+    },
+    {
+      "id": "case-illegal-access",
+      "title": "连续两个节点都报非法内存访问",
+      "subtitle": "自定义算子上线后必现 ｜ 换节点仍然复现",
+      "evidence": {
+        "reported_at": "2026-10-10T16:22:19+08:00",
+        "job": {
+          "name": "ocr-detect-train",
+          "user": "wangfang",
+          "node": "lyg2103",
+          "gpu_count": 8,
+          "gpu_type": "A100_80",
+          "start_hour": 16,
+          "runtime_hours": 0.1,
+          "status": "failed"
+        },
+        "command": "torchrun --nproc_per_node=8 train.py --model dbnet --micro-batch 16 --seq-len 1024 --tp 1 --dp 8 --zero 1",
+        "stderr_excerpt": "CUDA error: an illegal memory access was encountered\nCompile with `TORCH_USE_CUDA_DYN...`\n\n  File \"train.py\", line 214, in forward\n    out = self.warp_perspective(feat, self.grid)\nRuntimeError: CUDA error: an illegal memory access was encountered\n\n同时段 dmesg:\nNVRM: Xid (PCI:0000:3b:00): 13, pid=41322, Graphics Engine Exception\nNVRM: Xid (PCI:0000:3b:00): 31, pid=41322, MMU Fault\n同任务在 lyg2108 上复现，Xid 码一致。",
+        "docker_image": "registry.local/pytorch:2.4.1-cu124-nccl2.21",
+        "environment": {
+          "driver": "550.54.14",
+          "cuda_runtime": "12.4",
+          "torch": "2.4.1+cu124",
+          "nccl": "2.21.5",
+          "python": "3.11.9"
+        },
+        "training_config": {
+          "model_params_b": 0.09,
+          "precision": "fp16",
+          "batch_size": 16,
+          "seq_len": 1024,
+          "hidden_size": 1024,
+          "num_layers": 18,
+          "tp": 1,
+          "dp": 8,
+          "zero_stage": 1,
+          "recompute": false,
+          "flash_attn": false,
+          "gpu_type": "A100_80"
+        },
+        "node_telemetry": {
+          "window": "16:15-16:30",
+          "xid_events": [
+            {
+              "code": 13,
+              "count": 5,
+              "first_at": "16:21",
+              "last_at": "16:22",
+              "pci": "0000:3b:00"
+            },
+            {
+              "code": 31,
+              "count": 4,
+              "first_at": "16:21",
+              "last_at": "16:22",
+              "pci": "0000:3b:00"
+            }
+          ],
+          "ecc_uncorrectable": 0,
+          "ecc_correctable": 4,
+          "clock_throttle": "none",
+          "note": "两台不同节点上报完全相同的 Xid 组合，且都精确对应同一次前向调用"
+        }
+      },
+      "expected": {
+        "class": "application",
+        "root_cause": "Xid 13/31 属于应用侧非法访问，且跟随任务跨节点复现——是 warp_perspective 自定义算子里的越界访问，不是硬件故障",
+        "should_rma": false,
+        "key_tool": "lookup_xid",
+        "trap": "这是最容易被误报修的一类：Xid 出现 ≠ 硬件坏"
+      }
+    },
+    {
+      "id": "case-driver-old",
+      "title": "换镜像后 torch 认不到 GPU",
+      "subtitle": "驱动 535 ｜ 新镜像带 CUDA 12.6 运行时",
+      "evidence": {
+        "reported_at": "2026-10-13T09:12:44+08:00",
+        "job": {
+          "name": "env-smoke-test",
+          "user": "zhaolei",
+          "node": "lyg2112",
+          "gpu_count": 8,
+          "gpu_type": "H800",
+          "start_hour": 9,
+          "runtime_hours": 0.02,
+          "status": "failed"
+        },
+        "command": "python -c \"import torch; print(torch.cuda.is_available(), torch.version.cuda)\"",
+        "stderr_excerpt": "RuntimeError: The NVIDIA driver on your system is too old (found version 12020). Please update your GPU driver by downloading and installing a new version from the URL: http://www.nvidia.com/Download/index.aspx Alternatively, go to: https://pytorch.org to install a PyTorch version that has been compiled with your version of the CUDA driver.",
+        "docker_image": "registry.local/pytorch:2.6.0-cu126-nccl2.22",
+        "environment": {
+          "driver": "535.104.12",
+          "cuda_runtime": "12.6",
+          "torch": "2.6.0+cu126",
+          "nccl": "2.22.3",
+          "python": "3.12.4"
+        },
+        "training_config": {
+          "model_params_b": 0,
+          "precision": "bf16"
+        },
+        "node_telemetry": {
+          "window": "09:00-09:15",
+          "xid_events": [],
+          "ecc_uncorrectable": 0,
+          "ecc_correctable": 3,
+          "clock_throttle": "none",
+          "note": "硬件完全正常；该节点驱动比其他节点落后一个大版本"
+        }
+      },
+      "expected": {
+        "class": "environment",
+        "root_cause": "驱动 535 只支持到 CUDA 12.2，而镜像带的是 CUDA 12.6 运行时；报错里的 12020 正是 12.2 的编码",
+        "should_rma": false,
+      "key_tool": "check_compat",
+      "trap": "★ 容易被归成「硬件不兼容」或「这批卡有问题」。其实驱动和卡都没问题：是**容器镜像里的 CUDA 运行时**超过了驱动支持上限。改镜像即可——查硬件方向会白花一周"
+    }
+    },
+    {
+      "id": "case-xid48-dbe",
+      "title": "训练中途被杀，dmesg 出现不可纠正 ECC",
+      "subtitle": "单卡 Xid 48 ｜ 任务无法继续",
+      "evidence": {
+        "reported_at": "2026-10-11T11:47:02+08:00",
+        "job": {
+          "name": "vit-large-pretrain",
+          "user": "sunqi",
+          "node": "lyg2109",
+          "gpu_count": 8,
+          "gpu_type": "H100",
+          "start_hour": 8,
+          "runtime_hours": 3.7,
+          "status": "failed"
+        },
+        "command": "torchrun --nproc_per_node=8 train.py --model vit-l --micro-batch 32 --seq-len 1024 --tp 1 --dp 8 --zero 2",
+        "stderr_excerpt": "[rank 5] CUDA error: uncorrectable ECC error encountered\n[rank 5] Exception raised from c10_cuda_check_implementation at c10/cuda/CUDAException.cpp:40\n[rank 5] Process 31884 terminated with signal SIGABRT\n\ndmesg:\nNVRM: Xid (PCI:0000:4d:00): 48, pid=31884, name=python3, Double Bit ECC Error, DBE\nNVRM: Xid (PCI:0000:4d:00): 45, pid=31884, Preemptive cleanup of other clients",
+        "docker_image": "registry.local/pytorch:2.4.1-cu124-nccl2.21",
+        "environment": {
+          "driver": "550.54.14",
+          "cuda_runtime": "12.4",
+          "torch": "2.4.1+cu124",
+          "nccl": "2.21.5",
+          "python": "3.11.9"
+        },
+        "training_config": {
+          "model_params_b": 0.3,
+          "precision": "bf16",
+          "batch_size": 32,
+          "seq_len": 1024,
+          "hidden_size": 1024,
+          "num_layers": 24,
+          "tp": 1,
+          "dp": 8,
+          "zero_stage": 2,
+          "recompute": false,
+          "flash_attn": true,
+          "gpu_type": "H100"
+        },
+        "node_telemetry": {
+          "window": "08:00-11:50",
+          "xid_events": [
+            {
+              "code": 48,
+              "count": 1,
+              "first_at": "11:46",
+              "last_at": "11:46",
+              "pci": "0000:4d:00"
+            },
+            {
+              "code": 45,
+              "count": 2,
+              "first_at": "11:46",
+              "last_at": "11:47",
+              "pci": "0000:4d:00"
+            }
+          ],
+          "ecc_uncorrectable": 1,
+          "ecc_correctable": 214,
+          "clock_throttle": "none",
+          "note": "可纠正 ECC 计数 214 明显高于同批其他卡（基线约 10-20）"
+        }
+      },
+      "expected": {
+        "class": "hardware",
+        "root_cause": "Xid 48 是不可纠正显存错误；同卡可纠正 ECC 计数 214 远超基线，属明确硬件劣化。Xid 45 是次生事件，不是根因",
+        "should_rma": true,
+        "key_tool": "lookup_xid",
+        "trap": "Xid 45 是「前序错误的后果」，把它当根因会查错方向"
+      }
+    },
+    {
+      "id": "case-xid94-single",
+      "title": "单张卡报了一次 contained ECC",
+      "subtitle": "A100 ｜ Xid 94 一次 ｜ 其余应用未受影响",
+      "evidence": {
+        "reported_at": "2026-10-13T21:33:10+08:00",
+        "job": {
+          "name": "bert-ft-batch",
+          "user": "huangmeng",
+          "node": "lyg2103",
+          "gpu_count": 8,
+          "gpu_type": "A100_80",
+          "start_hour": 20,
+          "runtime_hours": 1.5,
+          "status": "restarted"
+        },
+        "command": "torchrun --nproc_per_node=8 train.py --model bert-large --micro-batch 64 --seq-len 512 --tp 1 --dp 8 --zero 1",
+        "stderr_excerpt": "[rank 6] CUDA error: uncorrectable ECC error encountered\n[rank 6] Process 51207 terminated with signal SIGABRT\n其余 rank 正常退出，未受影响。\n\ndmesg:\nNVRM: Xid (PCI:0000:5a:00): 94, pid=51207, name=python3, Contained ECC Error",
+        "docker_image": "registry.local/pytorch:2.4.1-cu124-nccl2.21",
+        "environment": {
+          "driver": "550.54.14",
+          "cuda_runtime": "12.4",
+          "torch": "2.4.1+cu124",
+          "nccl": "2.21.5",
+          "python": "3.11.9"
+        },
+        "training_config": {
+          "model_params_b": 0.34,
+          "precision": "bf16",
+          "batch_size": 64,
+          "seq_len": 512,
+          "hidden_size": 1024,
+          "num_layers": 24,
+          "tp": 1,
+          "dp": 8,
+          "zero_stage": 1,
+          "recompute": false,
+          "flash_attn": true,
+          "gpu_type": "A100_80"
+        },
+        "node_telemetry": {
+          "window": "20:00-21:40",
+          "xid_events": [
+            {
+              "code": 94,
+              "count": 1,
+              "first_at": "21:32",
+              "last_at": "21:32",
+              "pci": "0000:5a:00"
+            }
+          ],
+          "ecc_uncorrectable": 1,
+          "ecc_correctable": 16,
+          "clock_throttle": "none",
+          "history_30d": "该卡近 30 天仅此 1 次 94，可纠正 ECC 稳定在基线区间",
+          "note": "单次 94，无 95，无 63/64 重映射事件"
+        }
+      },
+      "expected": {
+        "class": "hardware_watch",
+        "root_cause": "Xid 94 是 error containment 机制按预期生效：错误被隔离在单个应用内，应用重启即可，其余应用未受影响。单次发生属正常范围",
+        "should_rma": false,
+        "key_tool": "lookup_xid",
+        "trap": "这是反向误判：因为看到「ECC 错误」就报修，白白让一张好卡下线"
+      }
+    },
+    {
+      "id": "case-xid94-rising",
+      "title": "同一张卡的 94 在两周内涨了 7 次",
+      "subtitle": "A100 ｜ 94 频次上升 ｜ 并首次出现 95",
+      "evidence": {
+        "reported_at": "2026-10-13T05:19:47+08:00",
+        "job": {
+          "name": "gpt-struct-train",
+          "user": "huangmeng",
+          "node": "lyg2103",
+          "gpu_count": 8,
+          "gpu_type": "A100_80",
+          "start_hour": 3,
+          "runtime_hours": 2.2,
+          "status": "failed"
+        },
+        "command": "torchrun --nproc_per_node=8 train.py --model gpt-struct --micro-batch 16 --seq-len 2048 --tp 1 --dp 8 --zero 2",
+        "stderr_excerpt": "[rank 6] CUDA error: uncorrectable ECC error encountered\n[rank 6] Process 44901 terminated with signal SIGABRT\n[rank 2] CUDA error: uncorrectable ECC error encountered\n[rank 2] Process 44897 terminated with signal SIGABRT\n多个 rank 同时终止。\n\ndmesg:\nNVRM: Xid (PCI:0000:5a:00): 94, pid=44901, Contained ECC Error\nNVRM: Xid (PCI:0000:5a:00): 95, pid=44897, Uncontained ECC Error",
+        "docker_image": "registry.local/pytorch:2.4.1-cu124-nccl2.21",
+        "environment": {
+          "driver": "550.54.14",
+          "cuda_runtime": "12.4",
+          "torch": "2.4.1+cu124",
+          "nccl": "2.21.5",
+          "python": "3.11.9"
+        },
+        "training_config": {
+          "model_params_b": 0.35,
+          "precision": "bf16",
+          "batch_size": 16,
+          "seq_len": 2048,
+          "hidden_size": 1024,
+          "num_layers": 24,
+          "tp": 1,
+          "dp": 8,
+          "zero_stage": 2,
+          "recompute": false,
+          "flash_attn": true,
+          "gpu_type": "A100_80"
+        },
+        "node_telemetry": {
+          "window": "03:00-05:30",
+          "xid_events": [
+            {
+              "code": 94,
+              "count": 2,
+              "first_at": "05:18",
+              "last_at": "05:19",
+              "pci": "0000:5a:00"
+            },
+            {
+              "code": 95,
+              "count": 1,
+              "first_at": "05:19",
+              "last_at": "05:19",
+              "pci": "0000:5a:00"
+            }
+          ],
+          "ecc_uncorrectable": 3,
+          "ecc_correctable": 89,
+          "clock_throttle": "none",
+          "history_30d": "该卡近 14 天内 Xid 94 共 7 次（09-30、10-02、10-05、10-07、10-09、10-11、10-13），可纠正 ECC 从约 20 升至 89",
+          "note": "94 频次持续上升，且本次首次出现 95（未隔离）"
+        }
+      },
+      "expected": {
+        "class": "hardware",
+        "root_cause": "Xid 94 频次在两周内从 0 升至 7 次、可纠正 ECC 同步从 20 涨到 89，说明劣化已超出 containment 能力；本次首次出现 Xid 95（未隔离）即为越限信号，应走 RMA",
+        "should_rma": true,
+        "key_tool": "inspect_node",
+        "trap": "与上一个案例是同一个错误码、同一张卡型、同一个节点——判别依据不是码本身，而是趋势与是否跨应用扩散"
+      }
+    },
+    {
+      "id": "case-xid79-bus",
+      "title": "进程收到 Bus error 后整卡消失",
+      "subtitle": "训练中 GPU 从 PCIe 掉线",
+      "evidence": {
+        "reported_at": "2026-10-09T18:05:36+08:00",
+        "job": {
+          "name": "diffusion-train",
+          "user": "zhoujie",
+          "node": "lyg2107",
+          "gpu_count": 8,
+          "gpu_type": "A800",
+          "start_hour": 15,
+          "runtime_hours": 3.0,
+          "status": "failed"
+        },
+        "command": "torchrun --nproc_per_node=8 train.py --model sd-xl --micro-batch 4 --seq-len 1024 --tp 1 --dp 8 --zero 2",
+        "stderr_excerpt": "[rank 4] Bus error (core dumped)\n[rank 4] Process 28613 terminated with signal SIGBUS\n\nnvidia-smi 输出:\n+-----------------------------------------------------------------------------+\n| NVIDIA-SMI 550.54.14   Driver Version: 550.54.14   CUDA Version: 12.4       |\n|-------------------------------+----------------------+----------------------+\n|   4  NVIDIA A800-SXM4-80GB   | 00000000:4D:00.0 Off |                    0 |\n| N/A   30C    P0    N/A / 400W |  N/A  ECC           |        ERR!         |\n+-------------------------------+----------------------+----------------------+\n\ndmesg:\nNVRM: Xid (PCI:0000:4d:00): 79, pid=28613, GPU has fallen off the bus.",
+        "docker_image": "registry.local/pytorch:2.4.1-cu124-nccl2.21",
+        "environment": {
+          "driver": "550.54.14",
+          "cuda_runtime": "12.4",
+          "torch": "2.4.1+cu124",
+          "nccl": "2.21.5",
+          "python": "3.11.9"
+        },
+        "training_config": {
+          "model_params_b": 2.6,
+          "precision": "bf16",
+          "batch_size": 4,
+          "seq_len": 1024,
+          "hidden_size": 1280,
+          "num_layers": 32,
+          "tp": 1,
+          "dp": 8,
+          "zero_stage": 2,
+          "recompute": false,
+          "flash_attn": true,
+          "gpu_type": "A800"
+        },
+        "node_telemetry": {
+          "window": "15:00-18:10",
+          "xid_events": [
+            {
+              "code": 79,
+              "count": 1,
+              "first_at": "18:05",
+              "last_at": "18:05",
+              "pci": "0000:4d:00"
+            }
+          ],
+          "ecc_uncorrectable": 0,
+          "ecc_correctable": 11,
+          "clock_throttle": "none",
+          "pcie_aer": "该槽位近 7 天记录 4 次 correctable AER，其他槽位为 0",
+          "note": "GPU 已从 PCIe 总线消失，nvidia-smi 对该卡显示 ERR!"
+        }
+      },
+      "expected": {
+        "class": "hardware",
+        "root_cause": "Xid 79 表示 GPU 已无法经 PCIe 被驱动访问。同槽位近 7 天有 4 次 correctable AER 而其他槽位为 0，指向 PCIe 链路/槽位问题，需硬件处理",
+        "should_rma": true,
+      "key_tool": "lookup_xid",
+      "trap": "★ 与「驱动掉了」那一组症状相似（都是访问不到卡），但这里设备已经**从 PCI 总线上消失**。这一条必须报修，而且重装驱动永远修不好——两组案例放在一起，就是为了说明「同一句报错可以有两个相反的答案」"
+    }
+    },
+    {
+      "id": "case-gsp-119",
+      "title": "偶发 cudaGetDeviceCount 失败",
+      "subtitle": "Xid 119/120 ｜ GSP 相关 ｜ 无 ECC 异常",
+      "evidence": {
+        "reported_at": "2026-10-08T13:26:58+08:00",
+        "job": {
+          "name": "vllm-serving-bench",
+          "user": "fanglin",
+          "node": "lyg2104",
+          "gpu_count": 8,
+          "gpu_type": "H20",
+          "start_hour": 13,
+          "runtime_hours": 0.3,
+          "status": "failed"
+        },
+        "command": "python -m vllm.entrypoints.openai.api_server --model Qwen2.5-72B --tensor-parallel-size 8",
+        "stderr_excerpt": "torch.cuda.init() failed\nRuntimeError: CUDA initialization: Unexpected error from cudaGetDeviceCount(). Error code: 999\n(no further error text available)\n\n反复重试三次中有一次成功。\n\ndmesg:\nNVRM: Xid (PCI:0000:3b:00): 119, pid=19302, name=python3, GSP RPC Timeout\nNVRM: Xid (PCI:0000:3b:00): 120, pid=19302, name=python3, GSP Error",
+        "docker_image": "registry.local/pytorch:2.4.1-cu124-nccl2.21",
+        "environment": {
+          "driver": "550.54.14",
+          "cuda_runtime": "12.4",
+          "torch": "2.4.1+cu124",
+          "nccl": "2.21.5",
+          "python": "3.11.9"
+        },
+        "training_config": {
+          "model_params_b": 72,
+          "precision": "bf16",
+          "batch_size": 1,
+          "seq_len": 4096,
+          "hidden_size": 8192,
+          "num_layers": 80,
+          "tp": 8,
+          "dp": 1,
+          "zero_stage": 0,
+          "recompute": false,
+          "flash_attn": true,
+          "gpu_type": "H20"
+        },
+        "node_telemetry": {
+          "window": "13:00-13:30",
+          "xid_events": [
+            {
+              "code": 119,
+              "count": 4,
+              "first_at": "13:25",
+              "last_at": "13:26",
+              "pci": "0000:3b:00"
+            },
+            {
+              "code": 120,
+              "count": 2,
+              "first_at": "13:25",
+              "last_at": "13:26",
+              "pci": "0000:3b:00"
+            }
+          ],
+          "ecc_uncorrectable": 0,
+          "ecc_correctable": 8,
+          "gsp_firmware": "550.54.14（与驱动同版本）",
+          "note": "无任何 ECC 异常；异常集中在 GSP 侧，重试可成功——偶发性"
+        }
+      },
+      "expected": {
+        "class": "environment",
+        "root_cause": "Xid 119/120 指向 GSP 固件/驱动软件栈，不是显存或芯片报废。可重试成功说明是间歇性软件栈问题，应先按驱动/固件路径处理",
+        "should_rma": false,
+        "key_tool": "lookup_xid",
+        "trap": "不要因为出现两个 Xid 码就判定「多张卡故障」或直接重启整节点"
+      }
+    },
+    {
+      "id": "case-driver-nvml-mismatch",
+      "title": "集群巡检发现 nvidia-smi 用不了",
+      "subtitle": "昨晚自动升级跑过 ｜ 没重启 ｜ 8 张卡都在位",
+      "evidence": {
+        "reported_at": "2026-10-13T08:41:12+08:00",
+        "job": {
+          "name": "nightly-pretrain",
+          "user": "chenyu",
+          "node": "lyg2111",
+          "gpu_count": 8,
+          "gpu_type": "H800",
+          "start_hour": 8,
+          "runtime_hours": 0.1,
+          "status": "failed"
+        },
+        "command": "nvidia-smi",
+        "stderr_excerpt": "Failed to initialize NVML: Driver/library version mismatch\nNVML library version: 535.183.06\n\nsyslog:\nNVRM: API mismatch: the client has the version 535.183.06,\nNVRM: but this kernel module has the version 535.183.01. Please\nNVRM: make sure that this kernel module and all NVIDIA driver\nNVRM: components have the same version.\n\nlspci | grep -i nvidia:\n4d:00.0 3D controller: NVIDIA Corporation Device 2324 (rev a1)\n5a:00.0 3D controller: NVIDIA Corporation Device 2324 (rev a1)\n（8 个设备全部在位）",
+        "docker_image": "",
+        "environment": {
+          "driver": "535.183.06",
+          "cuda_runtime": "12.2",
+          "torch": "2.3.1+cu121",
+          "nccl": "2.20.5",
+          "python": "3.10.14"
+        },
+        "training_config": {
+          "model_params_b": 7,
+          "precision": "bf16"
+        },
+        "node_telemetry": {
+          "window": "08:00-08:45",
+          "xid_events": [],
+          "ecc_uncorrectable": 0,
+          "ecc_correctable": 14,
+          "clock_throttle": "none",
+          "pcie_aer": null,
+          "note": "无任何 Xid 事件；8 张卡全部在 PCI 总线上；该节点昨晚被 unattended-upgrade 改过 NVIDIA 用户态包，之后未重启"
+        }
+      },
+      "expected": {
+        "class": "environment",
+        "root_cause": "用户态驱动包已升到 535.183.06，但内核里仍是 535.183.01 的模块——一次半完成的自动升级。重启即可对齐，与硬件无关",
+        "should_rma": false,
+        "key_tool": "search_failure_signature",
+        "trap": "与下一个案例外观极其相似。判别依据是：设备是否还在 PCI 总线上、有没有 Xid"
+      }
+    },
+    {
+      "id": "case-smi-driver-dead",
+      "title": "nvidia-smi 彻底不通，卡也不见了",
+      "subtitle": "同样的报错 ｜ 但 dmesg 里有 Xid 79",
+      "evidence": {
+        "reported_at": "2026-10-13T02:17:33+08:00",
+        "job": {
+          "name": "long-run-pretrain",
+          "user": "zhoujie",
+          "node": "lyg2107",
+          "gpu_count": 8,
+          "gpu_type": "A800",
+          "start_hour": 22,
+          "runtime_hours": 4.2,
+          "status": "failed"
+        },
+        "command": "nvidia-smi",
+        "stderr_excerpt": "NVIDIA-SMI has failed because it couldn't communicate with the NVIDIA driver. Make sure that the latest NVIDIA driver is installed and running.\n\n重装驱动后仍然报同样的错误。\n\ndmesg:\nNVRM: Xid (PCI:0000:4d:00): 79, pid=28613, GPU has fallen off the bus.\nNVRM: RmInitAdapter failed! (0x26:0xffff:1544)\n\nlspci | grep -i nvidia:\n5a:00.0 3D controller: NVIDIA Corporation Device 20b2 (rev a1)\n（只有 7 个设备，4d:00 已消失）",
+        "docker_image": "",
+        "environment": {
+          "driver": "550.54.14",
+          "cuda_runtime": "12.4",
+          "torch": "2.4.1+cu124",
+          "nccl": "2.21.5",
+          "python": "3.11.9"
+        },
+        "training_config": {
+          "model_params_b": 13,
+          "precision": "bf16"
+        },
+        "node_telemetry": {
+          "window": "22:00-02:20",
+          "xid_events": [
+            {
+              "code": 79,
+              "count": 1,
+              "first_at": "02:16",
+              "last_at": "02:16",
+              "pci": "0000:4d:00"
+            }
+          ],
+          "ecc_uncorrectable": 0,
+          "ecc_correctable": 11,
+          "clock_throttle": "none",
+          "pcie_aer": "该槽位近 7 天记录 5 次 correctable AER，同机其他槽位为 0",
+          "note": "4d:00 已从 PCI 总线消失；该槽位 AER 计数显著高于同机其他槽位"
+        }
+      },
+      "expected": {
+        "class": "hardware",
+        "root_cause": "报错文本与上一个案例几乎一样，但 dmesg 有 Xid 79、设备已从 lspci 消失、重装驱动无效——这是 PCIe 链路/槽位硬件故障，软件手段无法恢复",
+        "should_rma": true,
+        "key_tool": "inspect_node",
+        "trap": "★ 「症状≠根因」的最佳教材：两句报错一模一样，一个重启就好、一个必须换硬件"
+      }
+    },
+    {
+      "id": "case-gpu-hang-xid62",
+      "title": "训练卡死不动，利用率却满格",
+      "subtitle": "进度条 40 分钟没动 ｜ 内核有 Xid 62",
+      "evidence": {
+        "reported_at": "2026-10-12T04:52:08+08:00",
+        "job": {
+          "name": "llm-pretrain-mix",
+          "user": "liuyang",
+          "node": "lyg2104",
+          "gpu_count": 8,
+          "gpu_type": "H20",
+          "start_hour": 1,
+          "runtime_hours": 3.8,
+          "status": "hanging"
+        },
+        "command": "torchrun --nproc_per_node=8 train.py --micro-batch 4 --seq-len 4096 --tp 4 --dp 2",
+        "stderr_excerpt": "step 1820 loss 2.4183\nstep 1821 loss 2.4151\nstep 1822 loss 2.4096\n（此后 40 分钟无任何输出）\n\n用户排查：\n$ nvidia-smi\n（该命令本身耗时 90 秒才返回，之后 GPU-Util 全部显示 100%）\n\n$ ps -eo pid,stat,wchan,etime,args | grep torchrun\n31884 D  nv_open        03:52 python3 -m torch.distributed.run ...\n31891 R  -              03:52 python3 -m torch.distributed.run ...\n\n$ timeout 5 nvidia-smi --gpu-reset -i 3\nUnable to reset the GPU: In use by another client\n\ndmesg:\nNVRM: Xid (PCI:0000:3b:00): 62, pid=31884, name=python3, Internal Micro-controller Halt",
+        "docker_image": "registry.local/pytorch:2.4.1-cu124-nccl2.21",
+        "environment": {
+          "driver": "550.54.14",
+          "cuda_runtime": "12.4",
+          "torch": "2.4.1+cu124",
+          "nccl": "2.21.5",
+          "python": "3.11.9"
+        },
+        "training_config": {
+          "model_params_b": 32,
+          "precision": "bf16",
+          "batch_size": 4,
+          "seq_len": 4096,
+          "hidden_size": 7168,
+          "num_layers": 60,
+          "tp": 4,
+          "dp": 2,
+          "zero_stage": 2,
+          "recompute": false,
+          "flash_attn": true,
+          "gpu_type": "H20"
+        },
+        "node_telemetry": {
+          "window": "01:00-05:00",
+          "xid_events": [
+            {
+              "code": 62,
+              "count": 2,
+              "first_at": "04:11",
+              "last_at": "04:12",
+              "pci": "0000:3b:00"
+            }
+          ],
+          "ecc_uncorrectable": 0,
+          "ecc_correctable": 21,
+          "clock_throttle": "none",
+          "gsp_firmware": "550.54.14（与驱动同版本）",
+          "note": "同批其他 3 台 H20 节点驱动为 555.42.02，仅本节点是 550.54.14"
+        }
+      },
+      "expected": {
+        "class": "environment",
+        "root_cause": "Xid 62（内部微控制器挂起）是 GPU 卡死的内核侧证据，不是应用问题；进程 D 状态阻塞在 nv_open 也印证卡在驱动层。同批节点驱动版本不一致，应先按驱动/固件方向处理，而不是去改训练代码",
+        "should_rma": false,
+        "key_tool": "inspect_node",
+        "trap": "看到「训练不动」就去查代码是最常见的错误方向"
+      }
+    },
+    {
+      "id": "case-gpu-hang-deadlock",
+      "title": "训练卡死，但内核干干净净",
+      "subtitle": "同样的卡死症状 ｜ 零 Xid ｜ 进程并非 D 状态",
+      "evidence": {
+        "reported_at": "2026-10-12T19:26:41+08:00",
+        "job": {
+          "name": "multimodal-sft",
+          "user": "wangfang",
+          "node": "lyg2108",
+          "gpu_count": 16,
+          "gpu_type": "H100",
+          "start_hour": 17,
+          "runtime_hours": 2.4,
+          "status": "hanging"
+        },
+        "command": "torchrun --nnodes=2 --nproc_per_node=8 train.py --micro-batch 2 --seq-len 2048 --tp 2 --dp 8",
+        "stderr_excerpt": "step 640 loss 1.8821\nstep 641 loss 1.8794\n（此后 25 分钟无输出，但只有 2 个 rank 静默）\n\n[rank 11] Watchdog caught collective operation timeout: WorkNCCL(SeqNum=6410, OpType=ALLGATHER, Timeout(ms)=600000) ran for 601220 milliseconds before timing out.\n[rank 11] NCCL error: unhandled system error\n（其余 rank 报同样的超时，但 rank 4 与 rank 11 最早）\n\n用户排查：\n$ ps -eo pid,stat,wchan,etime,args | grep torchrun\n40221 S  futex_wait_queue  02:24 python3 -m torch.distributed.run ...\n40233 S  futex_wait_queue  02:24 python3 -m torch.distributed.run ...\n（全部为 S 状态，没有 D 状态进程）\n\n$ dmesg -T | grep -i 'NVRM: Xid'\n（无任何输出）\n\n$ nvidia-smi\n（秒回，8 卡利用率均为 0%，显存仍占用）",
+        "docker_image": "registry.local/pytorch:2.4.1-cu124-nccl2.21",
+        "environment": {
+          "driver": "550.54.14",
+          "cuda_runtime": "12.4",
+          "torch": "2.4.1+cu124",
+          "nccl": "2.21.5",
+          "python": "3.11.9"
+        },
+        "training_config": {
+          "model_params_b": 8,
+          "precision": "bf16",
+          "batch_size": 2,
+          "seq_len": 2048,
+          "hidden_size": 4096,
+          "num_layers": 32,
+          "tp": 2,
+          "dp": 8,
+          "zero_stage": 2,
+          "recompute": false,
+          "flash_attn": true,
+          "gpu_type": "H100"
+        },
+        "node_telemetry": {
+          "window": "17:00-19:30",
+          "xid_events": [],
+          "ecc_uncorrectable": 0,
+          "ecc_correctable": 7,
+          "clock_throttle": "none",
+          "pcie_aer": null,
+          "note": "节点硬件侧完全干净：无 Xid、无 AER、无降频；nvidia-smi 秒回说明驱动响应正常"
+        }
+      },
+      "expected": {
+        "class": "application",
+        "root_cause": "卡死但内核零 Xid、nvidia-smi 秒回、进程处于 S 状态（futex 等待）而非 D 状态——说明 GPU 与驱动都正常，是应用层在集合通信上互相等待。且只有 rank 4/11 最先超时，指向代码里按 rank 分支的逻辑",
+        "should_rma": false,
+        "key_tool": "inspect_node",
+        "trap": "★ 与上一个案例构成对照：同样是「训练卡死」，一个查驱动、一个查代码，判别依据是内核是否干净、进程是否为 D 状态"
+      }
+    }
+  ]
+}

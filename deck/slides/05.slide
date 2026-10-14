@@ -1,0 +1,83 @@
+// 05 · 同一个码，相反的结论 —— 巨型数字 + 全宽证据条
+const FONT = 'Inter, "Helvetica Neue", Arial, sans-serif';
+const MONO = '"JetBrains Mono", "SF Mono", Menlo, monospace';
+const INK = '#0B1220';
+const RED = '#E5484D';
+const GREEN = '#16B981';
+const DIM = '#64748B';
+const BODY = '#1A2434';
+
+const PAIR = [
+    {
+        big: '1', node: 'lyg2103', tint: 'rgba(22,185,129,0.07)', bar: GREEN, color: GREEN,
+        l1: 'Xid 94 in the last 30 days', l2: '1 correctable ECC event, flat', chip: 'hardware_watch · no RMA',
+    },
+    {
+        big: '53', node: 'lyg2112', tint: 'rgba(229,72,77,0.07)', bar: RED, color: RED,
+        l1: 'Xid 94 in the last 30 days', l2: '118 correctable ECC events, still rising', chip: 'hardware · RMA filed',
+    },
+];
+
+<Slide style={{ width: 1280, height: 720, padding: '18px 72px', background: '#FFFFFF', fontFamily: FONT }}>
+    <Box style={{ width: 1136, height: 92, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end' }}>
+        <Text style={{ fontSize: 34, fontWeight: 700, color: INK, lineHeight: 1.3 }}>Same code. Opposite conclusions.</Text>
+        <Text style={{ fontFamily: MONO, fontSize: 14, color: DIM, lineHeight: 1.45 }}>lyg2103 vs lyg2112 · 30-day window</Text>
+    </Box>
+
+    <Box style={{ width: 1136, height: 544 }}>
+
+        <Box style={{ width: 1136, height: 175, flexDirection: 'row', gap: 24 }}>
+            <Box style={{ width: 489, padding: 16, borderRadius: 8, background: PAIR[0].tint, borderLeft: '4px solid ' + PAIR[0].bar, flexDirection: 'row', alignItems: 'center', gap: 18 }}>
+                <Text style={{ fontFamily: MONO, fontSize: 104, fontWeight: 700, color: PAIR[0].color, lineHeight: 1 }}>{PAIR[0].big}</Text>
+                <Box style={{ gap: 4 }}>
+                    <Text style={{ fontFamily: MONO, fontSize: 18, fontWeight: 700, color: INK, lineHeight: 1.4 }}>{PAIR[0].node}</Text>
+                    <Text style={{ fontSize: 14, color: DIM, lineHeight: 1.5 }}>{PAIR[0].l1}</Text>
+                    <Text style={{ fontSize: 14, color: DIM, lineHeight: 1.5 }}>{PAIR[0].l2}</Text>
+                    <Box style={{ marginTop: 6, paddingTop: 4, paddingBottom: 4, paddingLeft: 10, paddingRight: 10, borderRadius: 4, background: PAIR[0].bar }}>
+                        <Text style={{ fontFamily: MONO, fontSize: 13, color: '#FFFFFF' }}>{PAIR[0].chip}</Text>
+                    </Box>
+                </Box>
+            </Box>
+
+            <Box style={{ width: 623, padding: 16, borderRadius: 8, background: PAIR[1].tint, borderLeft: '4px solid ' + PAIR[1].bar, flexDirection: 'row', alignItems: 'center', gap: 18 }}>
+                <Text style={{ fontFamily: MONO, fontSize: 104, fontWeight: 700, color: PAIR[1].color, lineHeight: 1 }}>{PAIR[1].big}</Text>
+                <Box style={{ gap: 4 }}>
+                    <Text style={{ fontFamily: MONO, fontSize: 18, fontWeight: 700, color: INK, lineHeight: 1.4 }}>{PAIR[1].node}</Text>
+                    <Text style={{ fontSize: 14, color: DIM, lineHeight: 1.5 }}>{PAIR[1].l1}</Text>
+                    <Text style={{ fontSize: 14, color: DIM, lineHeight: 1.5 }}>{PAIR[1].l2}</Text>
+                    <Box style={{ marginTop: 6, paddingTop: 4, paddingBottom: 4, paddingLeft: 10, paddingRight: 10, borderRadius: 4, background: PAIR[1].bar }}>
+                        <Text style={{ fontFamily: MONO, fontSize: 13, color: '#FFFFFF' }}>{PAIR[1].chip}</Text>
+                    </Box>
+                </Box>
+            </Box>
+        </Box>
+
+        {/* 05 · 两行各自的裁图，中间明写省略了哪两行。
+            原来是「前五行」一张宽条 —— 那一版节点是并排的小卡片，五行只要 268px 高；
+            现在的值班页改成单栏后，每行要放名字 / 规格 / 状态 / 任务 / 异常信号，
+            五行有 551px 高，塞不进这个 3.85:1 的条里。
+            所以改成各裁一行、上下摆开，并**说清楚中间跳过了两行** ——
+            把 lyg2103 与 lyg2112 拼成相邻的两行，是拿画面造一个不存在的相邻关系。 */}
+        <Box style={{ width: 1136, height: 291, marginTop: 16, alignItems: 'center' }}>
+            <Image src='assets/crop-node-lyg2103.png' style={{ width: 1120, height: 116, border: '1px solid #E9EDF4' }} />
+            <Box style={{ width: 1120, height: 15, justifyContent: 'center' }}>
+                <Text style={{ fontSize: 11, color: DIM, lineHeight: 1.3 }}>
+                    two rows in between (lyg2107, lyg2108), omitted — both rows above are from the same list
+                </Text>
+            </Box>
+            <Image src='assets/crop-node-lyg2112.png' style={{ width: 1120, height: 158, border: '1px solid #E9EDF4' }} />
+        </Box>
+
+        <Box style={{ width: 1136, height: 46, marginTop: 16, justifyContent: 'center' }}>
+            <Text style={{ fontSize: 20, fontWeight: 600, color: BODY, lineHeight: 1.45 }}>
+                Both nodes reported Xid 94. What separated them was <span style={{ color: INK }}>how often it fired, and whether the count was still climbing</span>.
+            </Text>
+        </Box>
+
+    </Box>
+
+    <Box style={{ width: 1136, height: 48, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+        <Text style={{ fontSize: 14, color: DIM }}>Both rows read live from the cluster tab, over the same 30-day window</Text>
+        <Text style={{ fontFamily: MONO, fontSize: 14, color: DIM }}>05 / 14</Text>
+    </Box>
+</Slide>

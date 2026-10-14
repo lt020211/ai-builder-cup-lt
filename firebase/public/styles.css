@@ -1,59 +1,357 @@
+/* ============================================================================
+   训练故障分诊器 · 界面样式（D · 单栏工作台）
+   ----------------------------------------------------------------------------
+   设计约定（改样式前先读这一段，不然很容易把它改回「一堆圆角白卡 + 彩色徽章」）：
+     · 深底、单栏、大字号：演示视频在 1600×900 取景时最好读
+     · 数字一律等宽 + tabular-nums，同一列的数字必须对得齐
+     · 分区靠**发丝分隔线**，不靠卡片外框；只有需要「独立成块」的东西才给底
+     · 颜色只用来表达状态（健康/警告/危险），不用来装饰
+     · 「无数据」与 0 必须视觉可区分（缺数据用 —，零就是 0）
+   ----------------------------------------------------------------------------
+   ★ 这个文件里有一部分变量名是 **JS 直接引用的**，改名前先搜一遍：
+       app.js 里内联样式的 var(--warn) / var(--ok) / var(--mid)
+       renderActionsTab 里 var(--low) / var(--medium) / var(--high)
+     改掉这几个名字，界面上那几处颜色会静默失效（不报错、只是变默认色）。
+   ============================================================================ */
+
 :root{
-  --bg:#f6f5f2;--card:#fff;--line:#e3e1da;--text:#2c2c2a;--muted:#6b6a65;
-  --accent:#185fa5;--warn:#a32d2d;--mid:#854f0b;--ok:#0f6e56
+  /* 底色与面板 */
+  --bg:#090c12;      --topbg:#0b1017;   --panel:#0f1622;  --panel2:#0c121c;
+  --line:#1d2836;    --line2:#161f2b;   --hover:#121a26;
+  /* 文字 */
+  --fg:#eaf0f8;      --dim:#98a6bb;     --dim2:#62728c;
+  /* 状态色 */
+  --accent:#5b95ff;  --ok:#33d69a;      --warn:#f5b03f;   --bad:#ff6b78;
+  --mid:#f5b03f;
+  --okbg:rgba(51,214,154,.10);    --okbd:rgba(51,214,154,.38);
+  --warnbg:rgba(245,176,63,.10);  --warnbd:rgba(245,176,63,.38);
+  --badbg:rgba(255,107,120,.10);  --badbd:rgba(255,107,120,.40);
+  --accbg:rgba(91,149,255,.12);   --accbd:rgba(91,149,255,.40);
+  /* 风险等级（JS 用 var(--low) 之类取色） */
+  --low:#33d69a;     --medium:#f5b03f;  --high:#ff6b78;
+  --lowbg:rgba(51,214,154,.10);    --mediumbg:rgba(245,176,63,.10);
+  --highbg:rgba(255,107,120,.10);
+  --codebg:#0d1622;  --track:#18202d;   --navon:rgba(91,149,255,.13);
+  --r:12px;          --r-sm:8px;        --gap:16px;
+  --mw:1200px;       --fs:14.5px;
 }
-*{box-sizing:border-box}
+
+*,*::before,*::after{box-sizing:border-box}
+html{background:var(--bg)}
 body{
-  margin:0;background:var(--bg);color:var(--text);
-  font:14px/1.6 -apple-system,"PingFang SC","Helvetica Neue",Arial,sans-serif
+  margin:0;background:var(--bg);color:var(--fg);
+  font:var(--fs)/1.65 -apple-system,"PingFang SC","Helvetica Neue",Arial,sans-serif;
+  -webkit-font-smoothing:antialiased;
 }
-.wrap{max-width:1100px;margin:0 auto;padding:28px 20px 64px}
-h1{font-size:20px;font-weight:500;margin:0 0 6px}
-.sub{color:var(--muted);font-size:13px;margin-bottom:22px}
-.bar{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:20px}
-button{
-  font:inherit;padding:9px 18px;border:1px solid var(--accent);background:var(--accent);
-  color:#fff;border-radius:8px;cursor:pointer
-}
-button:disabled{opacity:.5;cursor:default}
-button.mini{padding:4px 12px;font-size:12px;border-radius:6px}
-button.accept{background:var(--ok);border-color:var(--ok)}
-button.reject{background:#fff;color:var(--muted);border-color:var(--line)}
-.cards{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:18px}
-.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px 16px}
-.card .k{color:var(--muted);font-size:12px;margin-bottom:6px}
-.card .v{font-size:22px;font-weight:500}
-.card .u{font-size:12px;color:var(--muted);font-weight:400;margin-left:3px}
-.warn{color:var(--warn)}
-section{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:18px 20px;margin-bottom:16px}
-section h2{font-size:15px;font-weight:500;margin:0 0 12px}
-.hint{color:var(--muted);font-size:12px}
-pre.ai{white-space:pre-wrap;font:13px/1.75 inherit;margin:0}
-table{width:100%;border-collapse:collapse;font-size:13px}
-th,td{text-align:left;padding:8px 10px;border-bottom:1px solid var(--line);white-space:nowrap}
-th{color:var(--muted);font-weight:400;font-size:12px}
-td.num{text-align:right;font-variant-numeric:tabular-nums}
-.tag{display:inline-block;padding:1px 8px;border-radius:99px;font-size:11px;border:1px solid var(--line);color:var(--muted)}
-.tag.high{color:var(--warn);border-color:var(--warn)}
-.tag.medium{color:var(--mid);border-color:var(--mid)}
-.curve{display:flex;align-items:flex-end;gap:3px;height:90px;margin:6px 0 4px}
-.curve i{flex:1;background:#b5d4f4;border-radius:2px 2px 0 0;display:block;position:relative}
-.curve i.best{background:#5dcaa5}
-.curve i.worst{background:#f09595}
-.axis{display:flex;gap:3px;font-size:11px;color:var(--muted)}
-.axis span{flex:1;text-align:center}
-.tools{margin:0;padding:0;list-style:none;font:12px/1.9 ui-monospace,Menlo,monospace}
-.tools li{display:flex;gap:8px;align-items:baseline;border-bottom:1px dashed var(--line);padding:3px 0}
+.mono{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+  font-variant-numeric:tabular-nums}
+.num{text-align:right;font-variant-numeric:tabular-nums}
+.dim{color:var(--dim)}
+.strong{font-weight:600;color:var(--fg)}
+.hint{color:var(--dim2);font-size:12px;line-height:1.7}
+code{font:12px ui-monospace,Menlo,monospace;background:var(--codebg);
+  padding:1px 5px;border-radius:4px;color:#b9c8dd}
+.app{min-height:100vh;display:flex;flex-direction:column}
+
+/* ---------------------------------------------------------------- 顶栏 */
+.topbar{display:flex;align-items:center;gap:24px;height:56px;padding:0 24px;
+  background:var(--topbg);border-bottom:1px solid var(--line);
+  position:sticky;top:0;z-index:9}
+.brand{display:flex;align-items:center;gap:10px;white-space:nowrap}
+.mark{display:inline-flex;align-items:center;justify-content:center;
+  width:26px;height:26px;border-radius:7px;color:#fff;font-size:11px;
+  font-weight:700;letter-spacing:.3px;
+  background:linear-gradient(135deg,#5b95ff,#2f6ae0)}
+.bn{font-size:14.5px;font-weight:600;letter-spacing:.2px}
+.bv{font-size:11.5px;color:var(--dim2);border-left:1px solid var(--line);
+  padding-left:10px;margin-left:2px}
+.nav{display:flex;gap:3px;flex:1}
+.nav button{font:inherit;font-size:13.5px;padding:8px 15px;cursor:pointer;
+  border:none;background:none;color:var(--dim);border-radius:var(--r-sm)}
+.nav button:hover{color:var(--fg);background:var(--hover)}
+.nav button.on{color:var(--fg);background:var(--navon);font-weight:500}
+.tmeta{display:flex;align-items:center;gap:10px;font-size:12px;white-space:nowrap}
+.srcdot{width:7px;height:7px;border-radius:50%;background:var(--ok);
+  box-shadow:0 0 0 3px rgba(51,214,154,.18)}
+.src{color:var(--dim)}
+.sep{width:1px;height:14px;background:var(--line)}
+
+main{flex:1;width:100%;max-width:var(--mw);margin:0 auto;
+  padding:26px 24px 56px;display:flex;flex-direction:column;gap:var(--gap)}
+/* ★ 标签面板必须能当 flex 子项收缩，否则里面的横向滚动表格会把整页撑宽 */
+.tab{display:flex;flex-direction:column;gap:var(--gap);min-width:0}
+.tab[hidden]{display:none}
+/* #case-result 用内联 style 控制显隐（app.js 会写 display:'block'），
+   所以它自己不能是 flex —— 间距交给里面这层。 */
+.tabbody{display:flex;flex-direction:column;gap:var(--gap)}
+
+/* ---------------------------------------------------------------- 页头 */
+.pagehead{display:flex;align-items:flex-end;justify-content:space-between;
+  gap:24px;flex-wrap:wrap;padding-top:4px}
+.pagehead h1{margin:0 0 6px;font-size:24px;font-weight:600;letter-spacing:.2px}
+.lede{margin:0;max-width:760px;font-size:14px;color:var(--dim);line-height:1.7}
+.phact{display:flex;align-items:center;gap:9px;flex-wrap:wrap}
+/* 值班页头的状态提示（#patrol-status）。最长的一句是
+   「完成，但有一条动作回验未通过，见操作日志」——不设宽度上限的话，
+   它会跟三个按钮抢同一行，把按钮挤成竖排。给它一个上限让它自己换行。
+   注意这句是被 app.js 动态写入的：`setStatus('#patrol-status', …)`。 */
+.phact #patrol-status{max-width:340px;text-align:right;margin-left:2px}
+
+/* ---------------------------------------------------------------- 控件 */
+button{font:inherit;font-size:13.5px;padding:9px 17px;border-radius:var(--r-sm);
+  border:1px solid var(--accent);background:var(--accent);color:#fff;
+  cursor:pointer;transition:filter .12s}
+button:hover:not(:disabled){filter:brightness(1.08)}
+button:disabled{opacity:.45;cursor:default}
+button.mini{padding:5px 12px;font-size:12.5px;border-radius:6px}
+button.ghost{background:transparent;border-color:var(--line);color:var(--dim)}
+button.ghost:hover:not(:disabled){color:var(--fg);border-color:var(--dim2)}
+button.accept{background:var(--ok);border-color:var(--ok);color:#06251b}
+button.reject{background:transparent;border-color:var(--line);color:var(--dim)}
+button.danger{background:var(--bad);border-color:var(--bad)}
+select{font:inherit;font-size:13.5px;padding:9px 11px;border-radius:var(--r-sm);
+  border:1px solid var(--line);background:var(--panel);color:var(--fg);
+  max-width:520px}
+input[type=text]{font:inherit;font-size:13.5px;padding:8px 11px;
+  border-radius:7px;border:1px solid var(--line);background:var(--panel2);
+  color:var(--fg);width:100%}
+input[type=text]::placeholder{color:var(--dim2)}
+input[type=checkbox]{accent-color:var(--accent)}
+label.chk{display:flex;align-items:center;gap:7px;font-size:12.5px;
+  color:var(--dim);cursor:pointer}
+.bar{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+
+/* ---------------------------------------------------------------- KPI 条 */
+.kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:var(--gap)}
+.kpi{background:var(--panel);border:1px solid var(--line);border-radius:var(--r);
+  padding:16px 17px 17px;
+  background-image:linear-gradient(180deg,rgba(255,255,255,.022),transparent 70%)}
+.kh{display:flex;align-items:center;gap:8px;margin-bottom:9px}
+.kh .ic{width:24px;height:24px;border-radius:6px;flex:none;display:inline-flex;
+  align-items:center;justify-content:center;
+  background:var(--accbg);color:var(--accent)}
+.kh .ic svg{width:14px;height:14px;display:block}
+.kh .k{font-size:12px;color:var(--dim)}
+.kv{font-size:32px;font-weight:600;line-height:1.08;letter-spacing:-.6px;
+  font-variant-numeric:tabular-nums}
+.kv .u{font-size:12px;font-weight:400;color:var(--dim);margin-left:5px;
+  letter-spacing:0}
+.ks{font-size:11.5px;color:var(--dim2);margin-top:6px;line-height:1.6}
+.sbar{display:flex;width:100%;height:6px;border-radius:99px;overflow:hidden;
+  margin-top:10px;background:var(--track)}
+.sbar i{display:block;height:100%}
+.sbar i+i{margin-left:2px}
+.schips{display:flex;gap:6px;margin-top:11px;flex-wrap:wrap}
+.schip{font:11px ui-monospace,Menlo,monospace;padding:2px 8px;border-radius:99px;
+  border:1px solid;line-height:1.5}
+.schip.bad{color:var(--bad);border-color:var(--badbd);background:var(--badbg)}
+.schip.warn{color:var(--warn);border-color:var(--warnbd);background:var(--warnbg)}
+.schip.ok{color:var(--ok);border-color:var(--okbd);background:var(--okbg)}
+
+/* ---------------------------------------------------------------- 面板 */
+.panel{background:var(--panel);border:1px solid var(--line);
+  border-radius:var(--r);overflow:hidden;min-width:0}
+.ph{display:flex;align-items:baseline;gap:12px;justify-content:space-between;
+  padding:13px 18px;border-bottom:1px solid var(--line);flex-wrap:wrap}
+.ph h2{margin:0;font-size:14px;font-weight:600;letter-spacing:.2px;
+  display:flex;align-items:center;gap:9px}
+.ph h2::before{content:"";width:3px;height:13px;border-radius:2px;
+  background:var(--accent);display:inline-block}
+.phhint{font-size:11.5px;color:var(--dim2);line-height:1.6}
+.pb{padding:14px 18px 18px;min-width:0}
+.pb.tight{padding-top:6px}
+
+/* 提示条：说明「这条边界是什么」，不参与数据呈现 */
+.notice{border:1px solid var(--line);border-left:3px solid var(--warn);
+  background:var(--panel2);border-radius:var(--r-sm);padding:13px 15px;
+  font-size:12.5px;color:var(--dim);line-height:1.75}
+.notice b{color:var(--fg);font-weight:600}
+.notice code{font-size:11.5px}
+
+/* ---------------------------------------------------------------- 结论卡 */
+.verdict{display:grid;grid-template-columns:200px 1fr;gap:22px;
+  align-items:start}
+.verdict .big{border:1px solid var(--line);background:var(--panel2);
+  border-radius:var(--r-sm);padding:16px 18px;text-align:center}
+.verdict .big .lbl{font-size:11.5px;color:var(--dim2);margin-bottom:6px}
+.verdict .big .val{font-size:20px;font-weight:600;line-height:1.35}
+.verdict.rma .big{border-color:var(--badbd);background:var(--badbg);
+  color:var(--bad)}
+.verdict.norma .big{border-color:var(--okbd);background:var(--okbg);
+  color:var(--ok)}
+.verdict .meta{font-size:13px;min-width:0}
+.verdict .meta .row{display:flex;gap:12px;margin-bottom:7px;align-items:baseline}
+.verdict .meta .row .k{color:var(--dim2);min-width:84px;flex:none}
+.confbar{display:inline-block;width:180px;height:5px;background:var(--track);
+  border-radius:99px;overflow:hidden;vertical-align:middle}
+.confbar i{display:block;height:100%;background:var(--accent)}
+
+/* ---------------------------------------------------------------- 证据格 */
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));
+  gap:10px}
+.ev{background:var(--panel2);border:1px solid var(--line);
+  border-radius:var(--r-sm);padding:11px 13px;min-width:0}
+.ev .k{font-size:11px;color:var(--dim2);margin-bottom:5px;letter-spacing:.3px}
+.ev .v{font-size:12.5px;line-height:1.7;word-break:break-word}
+.ev .v.bad{color:var(--bad)}
+.ev .v.good{color:var(--ok)}
+
+.chip{display:inline-block;padding:2px 8px;border-radius:99px;font-size:11px;
+  border:1px solid var(--line);color:var(--dim);margin-right:4px;
+  line-height:1.5;white-space:nowrap}
+.chip.ref{color:var(--accent);border-color:var(--accbd);background:var(--accbg);
+  font-family:ui-monospace,Menlo,monospace}
+
+/* ---------------------------------------------------------------- 工具轨迹 */
+.tools{margin:0;padding:0;list-style:none;
+  font:12px/1.6 ui-monospace,SFMono-Regular,Menlo,monospace}
+.tools li{display:grid;grid-template-columns:230px 1fr;gap:14px;
+  align-items:baseline;padding:6px 0;border-bottom:1px dashed var(--line2)}
+.tools li:last-child{border-bottom:none}
+.tools li.fail b{color:var(--bad)}
 .tools b{color:var(--accent);font-weight:500;white-space:nowrap}
-.tools span{color:var(--muted);word-break:break-all}
-.action{border:1px solid var(--line);border-radius:10px;padding:12px 14px;margin-bottom:10px}
-.action.done{border-color:var(--ok);background:#f4fbf8}
-.action.denied{border-color:var(--line);background:#fafaf8;opacity:.7}
-.action .t{font-weight:500;margin-bottom:4px}
-.action .d{color:var(--muted);font-size:13px;margin-bottom:8px}
-.action .m{font-size:12px;color:var(--muted);margin-bottom:10px}
-.action .m b{color:var(--warn);font-weight:500}
-.action .m i{color:var(--ok);font-style:normal;font-weight:500}
-.summary{display:flex;gap:24px;flex-wrap:wrap;font-size:13px;padding:10px 0 2px;border-top:1px solid var(--line);margin-top:4px}
-code{font:12px ui-monospace,Menlo,monospace;background:#efeee9;padding:1px 5px;border-radius:4px}
-@media(max-width:760px){.cards{grid-template-columns:repeat(2,1fr)}}
+.tools span{color:var(--dim2);word-break:break-all}
+
+/* ---------------------------------------------------------------- 动作卡 */
+.acts{display:flex;flex-direction:column;gap:10px}
+.act{border:1px solid var(--line);border-left:3px solid var(--line);
+  border-radius:var(--r-sm);padding:13px 15px;background:var(--panel2)}
+.act.low{border-left-color:var(--low)}
+.act.medium{border-left-color:var(--medium)}
+.act.high{border-left-color:var(--high)}
+.act.done{border-color:var(--okbd);background:var(--okbg)}
+.act.rejected{opacity:.62}
+/* 明确不建议的动作：灰显但**仍然可读** —— 让人看清它是什么，只是不可选 */
+.act.muted{opacity:.62;background:var(--panel)}
+.act .hd{display:flex;gap:8px;align-items:center;flex-wrap:wrap;
+  margin-bottom:8px}
+.act .t{font-size:13.5px;font-weight:600}
+.act .d{color:var(--dim);font-size:12.5px;margin-bottom:9px;line-height:1.7}
+.act .rows{font-size:12px;color:var(--dim);display:grid;gap:4px;
+  margin-bottom:10px;line-height:1.7}
+.act .rows b{color:var(--fg);font-weight:500}
+.act .rows code{font-size:11.5px}
+.badge{display:inline-block;padding:2px 9px;border-radius:99px;font-size:11px;
+  border:1px solid;line-height:1.55;white-space:nowrap}
+.badge.low{color:var(--low);border-color:var(--okbd);background:var(--okbg)}
+.badge.medium{color:var(--medium);border-color:var(--warnbd);
+  background:var(--warnbg)}
+.badge.high{color:var(--high);border-color:var(--badbd);background:var(--badbg)}
+.badge.info{color:var(--dim);border-color:var(--line);background:transparent}
+.badge.ref{color:var(--accent);border-color:var(--accbd);background:var(--accbg)}
+.acts-actions{display:flex;gap:9px;flex-wrap:wrap;align-items:center}
+.approve-box{border-top:1px dashed var(--line);margin-top:12px;padding-top:12px;
+  display:grid;gap:8px}
+
+/* ---------------------------------------------------------------- 集群节点 */
+/* 单栏横向整行：名字 / 规格 · 状态 · 任务 / 异常信号
+   ★ 子元素顺序由 app.js 的 nodeCard 决定：.n → .s（规格·状态）→ .s.job（任务，
+     可能没有）→ .sig 或 .cordon。所以这三列用显式 grid 定位，不靠自动排版。 */
+.nodes{display:flex;flex-direction:column}
+.node{display:grid;grid-template-columns:212px 1fr minmax(0,300px);
+  grid-template-rows:auto auto;gap:3px 18px;align-items:baseline;
+  padding:14px 2px 14px 12px;border-bottom:1px solid var(--line2);
+  border-left:3px solid transparent}
+.node:last-child{border-bottom:none}
+.node.ok{border-left-color:rgba(51,214,154,.42)}
+.node.alert{border-left-color:var(--warn)}
+.node.crit{border-left-color:var(--bad)}
+.node .n{grid-column:1;grid-row:1 / span 2;align-self:center;
+  font:600 15px ui-monospace,SFMono-Regular,Menlo,monospace;letter-spacing:.2px}
+.node .s{grid-column:2;grid-row:1;font-size:12px;color:var(--dim2)}
+.node .s.job{grid-column:3;grid-row:1;text-align:right;
+  font-family:ui-monospace,Menlo,monospace;font-size:11.5px}
+.node .sig{grid-column:2 / span 2;grid-row:2;font-size:12px;
+  color:var(--warn);line-height:1.75}
+.node .cordon{grid-column:2 / span 2;grid-row:2;font-size:12px;
+  color:var(--ok)}
+
+/* ---------------------------------------------------------------- 操作日志 */
+.log{margin:0;padding:0;list-style:none;display:flex;flex-direction:column;
+  gap:2px}
+.log li{border-left:2px solid var(--line);padding:7px 0 7px 13px;
+  margin-left:2px;font-size:12.5px}
+.log li.ok{border-left-color:var(--ok)}
+.log li.fail{border-left-color:var(--bad)}
+.log li.info{border-left-color:var(--accent)}
+.log .tm{color:var(--dim2);font:11px ui-monospace,Menlo,monospace}
+.log .tx{margin-top:2px}
+
+/* ---------------------------------------------------------------- 工单 / 通知 */
+.stack{display:flex;flex-direction:column;gap:10px}
+.stack:empty{display:none}
+.tk{border:1px solid var(--line);border-radius:var(--r-sm);padding:12px 14px;
+  background:var(--panel2)}
+.tk .h{display:flex;gap:8px;align-items:center;flex-wrap:wrap;
+  margin-bottom:7px}
+.tk .b{color:var(--dim);font-size:12.5px;line-height:1.75;
+  white-space:pre-wrap;word-break:break-word}
+
+/* ---------------------------------------------------------------- 基准对照 */
+.bench{display:grid;grid-template-columns:1fr 1fr;gap:var(--gap);
+  margin-bottom:16px}
+.benchcard{border:1px solid var(--line);border-radius:var(--r-sm);
+  padding:16px 18px;background:var(--panel2)}
+.benchcard .k{font-size:12px;color:var(--dim);margin-bottom:8px}
+.benchcard .v{font-size:32px;font-weight:600;letter-spacing:-.5px;
+  font-variant-numeric:tabular-nums}
+.benchcard.ai{border-color:var(--accbd);background:var(--accbg)}
+
+/* ---------------------------------------------------------------- 表格 */
+table{width:100%;border-collapse:collapse;font-size:12.5px}
+th,td{text-align:left;padding:9px 11px;border-bottom:1px solid var(--line2);
+  vertical-align:top}
+th{color:var(--dim2);font-weight:500;font-size:11px;letter-spacing:.5px;
+  text-transform:uppercase;white-space:nowrap;
+  border-bottom-color:var(--line)}
+tbody tr:hover td{background:var(--hover)}
+tbody tr:last-child td{border-bottom:none}
+tr.miss td{background:var(--badbg)}
+td.mono{font-family:ui-monospace,Menlo,monospace;font-size:11.5px}
+/* 表格外面这层负责横向滚动，别让长命令把整页撑宽 */
+.tablewrap{overflow-x:auto;margin:0 -2px}
+
+/* ★ 动作库那张表必须钉死列宽。
+   默认的 auto 布局会按内容分配：命令列里是一行长命令、旁边几列是短文，
+   结果浏览器把命令列压到 ~130px，一条 export 语句被断成每行十来字符，
+   完全没法读。fixed 布局 + 百分比列宽才不会随内容漂。
+   列宽按各列**实际内容**定，不是平均分：
+     · 动作   label 最长「禁止节点接新任务（cordon）」+ 等宽 id →  17%
+     · 等级   只有一枚徽章「中风险」                            →   8%
+     · 影响面 最长「该节点上正在使用该卡的进程」                →  13%
+     · 命令   多行 shell 脚本，最需要宽度，所以给到最大          →  27%
+     · 预期输出 / 回滚  各是一句话                             →  18% / 17%
+   （改动这一行之前先看渲染结果 —— 内联宽度会被这里覆盖，反过来也一样。） */
+#action-tbl{table-layout:fixed;min-width:1080px}
+#action-tbl th:nth-child(1),#action-tbl td:nth-child(1){width:17%}
+#action-tbl th:nth-child(2),#action-tbl td:nth-child(2){width:8%}
+#action-tbl th:nth-child(3),#action-tbl td:nth-child(3){width:13%}
+#action-tbl th:nth-child(4),#action-tbl td:nth-child(4){width:27%}
+#action-tbl th:nth-child(5),#action-tbl td:nth-child(5){width:18%}
+#action-tbl th:nth-child(6),#action-tbl td:nth-child(6){width:17%}
+/* 命令格自己只管换行，不再管宽度。
+   字号比其它格小一号：这里一行要塞下尽可能多的 shell 字符。 */
+#action-tbl td.cmd{white-space:pre-wrap;word-break:break-all;
+  font-size:11px;line-height:1.62;color:#b9c8dd}
+#bench-tbl{min-width:920px}
+
+/* ---------------------------------------------------------------- 代码块 */
+pre{white-space:pre-wrap;word-break:break-word;margin:0}
+pre.ai{font:13px/1.85 inherit;color:var(--fg)}
+pre.cmd{background:#060a10;color:#cfe0f5;border:1px solid var(--line);
+  padding:11px 13px;border-radius:var(--r-sm);overflow-x:auto;
+  font:11.5px/1.75 ui-monospace,Menlo,monospace;margin:8px 0}
+
+/* ---------------------------------------------------------------- 响应式 */
+@media(max-width:1080px){
+  .kpis{grid-template-columns:repeat(2,1fr)}
+  .grid2,.bench{grid-template-columns:1fr}
+}
+@media(max-width:900px){
+  .node{grid-template-columns:1fr;grid-template-rows:auto}
+  .node .n,.node .s,.node .s.job,.node .sig,.node .cordon{grid-column:1;
+    grid-row:auto;text-align:left}
+  .verdict{grid-template-columns:1fr}
+  main{padding:20px 16px 44px}
+  .topbar{height:auto;flex-wrap:wrap;padding:10px 16px;gap:12px}
+}
