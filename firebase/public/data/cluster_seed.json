@@ -1,0 +1,156 @@
+{
+  "meta": {
+    "note": "模拟集群的种子数据。这是演示用的**构造数据**，命名与体量均已脱敏，不含任何真实集群信息。",
+    "why": "把它放在数据文件里而不是写死在代码里，是为了让「后台播种脚本」和「前端一键重置」共用同一份真相来源——两边各存一份，早晚会漂移。",
+    "reset_hint": "重新播种：python3 scripts/fb_firestore_setup.py seed",
+    "location": "asia-southeast1"
+  },
+  "nodes": {
+    "lyg2101": {
+      "node": "lyg2101",
+      "gpu_type": "H800_80G",
+      "gpu_count": 8,
+      "status": "healthy",
+      "pool": "train",
+      "cordoned": false,
+      "draining": false,
+      "jobs": [],
+      "updated_at": "2026-10-14T02:00:00Z",
+      "telemetry": {
+        "xid_events": [],
+        "ecc_uncorrectable": 0,
+        "ecc_correctable": 0,
+        "smi_ok": true,
+        "lspci_gpu_count": 8,
+        "history_30d": { "xid94_count": 0, "ecc_correctable_trend": "flat" }
+      }
+    },
+    "lyg2103": {
+      "node": "lyg2103",
+      "gpu_type": "H800_80G",
+      "gpu_count": 8,
+      "status": "healthy",
+      "pool": "train",
+      "cordoned": false,
+      "draining": false,
+      "jobs": [
+        { "id": "job-7741", "user": "htli", "gpus": [0, 1, 2, 3], "state": "running" }
+      ],
+      "updated_at": "2026-10-14T03:10:00Z",
+      "telemetry": {
+        "xid_events": [
+          { "code": 94, "gpu": 5, "at": "2026-10-14T01:22:00Z", "count": 1 }
+        ],
+        "ecc_uncorrectable": 0,
+        "ecc_correctable": 1,
+        "smi_ok": true,
+        "lspci_gpu_count": 8,
+        "history_30d": { "xid94_count": 1, "ecc_correctable_trend": "flat" }
+      }
+    },
+    "lyg2107": {
+      "node": "lyg2107",
+      "gpu_type": "A100_80G",
+      "gpu_count": 8,
+      "status": "healthy",
+      "pool": "train",
+      "cordoned": false,
+      "draining": false,
+      "jobs": [],
+      "updated_at": "2026-10-14T02:30:00Z",
+      "telemetry": {
+        "xid_events": [],
+        "ecc_uncorrectable": 0,
+        "ecc_correctable": 0,
+        "smi_ok": true,
+        "lspci_gpu_count": 8,
+        "history_30d": { "xid94_count": 0, "ecc_correctable_trend": "flat" }
+      }
+    },
+    "lyg2108": {
+      "node": "lyg2108",
+      "gpu_type": "H800_80G",
+      "gpu_count": 8,
+      "status": "degraded",
+      "pool": "train",
+      "cordoned": false,
+      "draining": false,
+      "jobs": [
+        { "id": "job-7820", "user": "wangq", "gpus": [0, 1, 2, 3, 4, 5, 6, 7], "state": "failed" }
+      ],
+      "updated_at": "2026-10-14T03:42:00Z",
+      "telemetry": {
+        "xid_events": [],
+        "ecc_uncorrectable": 0,
+        "ecc_correctable": 0,
+        "smi_ok": false,
+        "lspci_gpu_count": 8,
+        "smi_error": "Unable to determine the device handle for GPU 0000:4D:00.0: Unknown Error",
+        "kernel_module_loaded": true,
+        "module_for_kernel": false,
+        "secure_boot": true,
+        "history_30d": { "xid94_count": 0, "ecc_correctable_trend": "flat" }
+      }
+    },
+    "lyg2112": {
+      "node": "lyg2112",
+      "gpu_type": "H800_80G",
+      "gpu_count": 8,
+      "status": "healthy",
+      "pool": "train",
+      "cordoned": false,
+      "draining": false,
+      "jobs": [
+        { "id": "job-7903", "user": "chenl", "gpus": [2, 3], "state": "running" }
+      ],
+      "updated_at": "2026-10-14T04:05:00Z",
+      "telemetry": {
+        "xid_events": [
+          { "code": 94, "gpu": 3, "at": "2026-10-14T03:58:00Z", "count": 41 },
+          { "code": 94, "gpu": 3, "at": "2026-10-13T21:10:00Z", "count": 12 }
+        ],
+        "ecc_uncorrectable": 0,
+        "ecc_correctable": 118,
+        "smi_ok": true,
+        "lspci_gpu_count": 8,
+        "history_30d": { "xid94_count": 53, "ecc_correctable_trend": "rising" },
+        "row_remap_pending": 0
+      }
+    },
+    "lyg2115": {
+      "node": "lyg2115",
+      "gpu_type": "H800_80G",
+      "gpu_count": 8,
+      "status": "hang",
+      "pool": "train",
+      "cordoned": false,
+      "draining": false,
+      "jobs": [
+        { "id": "job-7855", "user": "zhaoy", "gpus": [0, 1, 2, 3, 4, 5, 6, 7], "state": "hung" }
+      ],
+      "updated_at": "2026-10-14T04:20:00Z",
+      "telemetry": {
+        "xid_events": [
+          { "code": 62, "gpu": 0, "at": "2026-10-14T04:12:00Z", "count": 1 }
+        ],
+        "ecc_uncorrectable": 0,
+        "ecc_correctable": 0,
+        "smi_ok": true,
+        "lspci_gpu_count": 8,
+        "hung_process": { "pid": 48213, "state": "D", "wchan": "nv_open", "etime": "01:12:04" },
+        "gpu_util_pct": 100,
+        "progress_stalled_minutes": 68,
+        "history_30d": { "xid94_count": 0, "ecc_correctable_trend": "flat" }
+      }
+    }
+  },
+  "expectations": {
+    "note": "每个节点被设计成「需要什么结论」，供演示脚本与自检使用。巡检时 agent 不该看到这一段——它只是给人看的对照表。",
+    "lyg2101": { "class": "healthy", "should_cordon": false, "should_rma": false, "why": "对照组，健康节点" },
+    "lyg2103": { "class": "hardware_watch", "should_cordon": false, "should_rma": false, "why": "Xid 94 单次，ECC 平稳；与 lyg2112 是同一个错误码，但结论相反" },
+    "lyg2107": { "class": "healthy", "should_cordon": false, "should_rma": false, "why": "对照组" },
+    "lyg2108": { "class": "environment", "should_cordon": false, "should_rma": false, "why": "smi 挂了但设备仍在 lspci、无 Xid 79 → 内核模块问题，重载即可，不是硬件" },
+    "lyg2112": { "class": "hardware", "should_cordon": true, "should_rma": true, "why": "Xid 94 七天上升 40 倍且 ECC 同步上升 → 真劣化。应先 cordon 止损，再走 RMA" },
+    "lyg2115": { "class": "environment", "should_cordon": true, "should_rma": false, "why": "Xid 62 + 进程 D 状态阻塞在 nv_open → 驱动侧挂死，不是硬件报废，但需先止损" }
+  }
+}

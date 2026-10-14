@@ -516,3 +516,61 @@ export function evidenceDigest(ev, pre) {
     memory_fit: pre.confirmed.memory_fit,
   };
 }
+
+// ======================================================================
+// 规则基线（F8 的对照物）
+// ======================================================================
+/**
+ * ★ 这个函数存在的唯一目的，是给 AI 分诊提供一个**可复现的对照**：
+ * 「如果只用规则，能判对多少？」
+ *
+ * 它不是产品逻辑——产品逻辑是模型基于多条证据做判断。界面上也会明确标注
+ * 它是「基线」，并和 AI 的结果并排展示。
+ *
+ * 它刻意**只做最朴素的两步**，不做任何修补：
+ *   1. 取预分析投票得分最高的分类；
+ *   2. 分类是 hardware 就建议报修，其余一律不建议。
+ *
+ * 这正是真实世界里的常见做法：看 Xid 码查表 → 表里写硬件就报修。
+ * 它会错在两类案例上——**需要读趋势的**和**需要辨因果链的**。
+ * 这两类恰好是模型能做好、规则做不好的地方，所以这个对照才有说服力。
+ *
+ * ⚠️ 如果要让基线表现更好，**不要改这个函数**，那等于把对照物也变成 AI。
+ * 正确的做法是把它当成「朴素规则能达到的上限」，如实报告它错在哪几题。
+ */
+export function ruleBasedTriage(ev, pre = null) {
+  const p = pre || preAnalyze(ev);
+  const hints = p.hints || [];
+  const top = hints[0] || null;
+  const cls = top ? top.class : 'undetermined';
+
+  return {
+    method: 'rule-baseline',
+    class: cls,
+    // 朴素规则：表里写硬件就报修，观察项与其它分类一律不报修。
+    // 它读不出「同一个 Xid 94，偶发与频次上升要区别对待」，这是设计上就做不到的。
+    should_rma: cls === 'hardware',
+    confidence: top ? Math.min(0.85, 0.35 + 0.05 * top.weight) : 0.1,
+    basis: top ? top.why.slice() : [],
+    note: '取投票最高的分类；分类为硬件即建议报修，否则不建议。不读趋势、不辨因果链。',
+  };
+}
+
+/**
+ * 对比一次分诊结果与案例的期望值。供 F8 的基准统计与界面并排展示使用。
+ *
+ * 只比两个字段：class 与 should_rma。理由很简单——这两个是「能被当场证伪的
+ * 布尔值」，比一比「叙述写得好不好」客观得多。
+ */
+export function compareWithExpected(result, expected) {
+  if (!expected) return null;
+  const classOk = result.class === expected.class;
+  const rmaOk = Boolean(result.should_rma) === Boolean(expected.should_rma);
+  return {
+    class_ok: classOk,
+    rma_ok: rmaOk,
+    pass: classOk && rmaOk,
+    got: { class: result.class, should_rma: Boolean(result.should_rma) },
+    want: { class: expected.class, should_rma: Boolean(expected.should_rma) },
+  };
+}

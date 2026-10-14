@@ -1,0 +1,56 @@
+// 02 · 目录 —— 左标题 + 右三章
+const FONT = 'Inter, "Helvetica Neue", Arial, sans-serif';
+const MONO = '"JetBrains Mono", "SF Mono", Menlo, monospace';
+const INK = '#0B1220';
+const BLUE = '#2F6BFF';
+const DIM = '#64748B';
+
+const CHAPTERS = [
+    { no: '01', title: 'The problem', desc: 'One error code, two opposite readings, both expensive', range: '03 – 05' },
+    { no: '02', title: 'What we built', desc: 'The agent reads the cluster, decides, acts, then reads back', range: '06 – 10' },
+    { no: '03', title: 'Evidence & boundaries', desc: 'The rule baseline scores 11 of 14; the 3 misses are listed', range: '11 – 14' },
+];
+
+<Slide style={{ width: 1280, height: 720, padding: '18px 72px', background: '#FFFFFF', fontFamily: FONT }}>
+    <Box style={{ width: 1136, height: 92, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end' }}>
+        <Text style={{ fontSize: 34, fontWeight: 700, color: INK, lineHeight: 1.3 }}>Three chapters</Text>
+        <Text style={{ fontFamily: MONO, fontSize: 14, color: DIM, lineHeight: 1.45 }}>Roadmap</Text>
+    </Box>
+
+    <Box style={{ width: 1136, height: 544, flexDirection: 'row', gap: 40 }}>
+        <Box style={{ width: 340, justifyContent: 'flex-start', gap: 18 }}>
+            <Box style={{ width: 3, height: 62, background: BLUE }} />
+            <Text style={{ fontSize: 22, fontWeight: 600, color: INK, lineHeight: 1.5 }}>
+                Each chapter ends on a number you can rerun.
+            </Text>
+            <Text style={{ fontSize: 16, color: DIM, lineHeight: 1.6 }}>
+                A benchmark score, a tool-call count, an operation log. Where a number was never measured,
+                the page shows a blank instead of a plausible value.
+            </Text>
+            <Text style={{ fontFamily: MONO, fontSize: 14, color: DIM, lineHeight: 1.6, marginTop: 6 }}>
+                detect → collect evidence → diagnose &amp; plan → act, notify, verify
+            </Text>
+        </Box>
+
+        <Box style={{ width: 756 }}>
+            {CHAPTERS.map((c, i) => (
+                <Box key={i} style={{
+                    width: 756, height: 180, flexDirection: 'row', alignItems: 'center', gap: 24,
+                    borderBottom: i < 2 ? '1px solid #E6EBF3' : 'none',
+                }}>
+                    <Text style={{ fontFamily: MONO, fontSize: 40, fontWeight: 700, color: BLUE, width: 74 }}>{c.no}</Text>
+                    <Box style={{ flex: 1 }}>
+                        <Text style={{ fontSize: 26, fontWeight: 600, color: INK, lineHeight: 1.4 }}>{c.title}</Text>
+                        <Text style={{ fontSize: 15, color: DIM, lineHeight: 1.55, marginTop: 4 }}>{c.desc}</Text>
+                    </Box>
+                    <Text style={{ fontFamily: MONO, fontSize: 14, color: DIM }}>{c.range}</Text>
+                </Box>
+            ))}
+        </Box>
+    </Box>
+
+    <Box style={{ width: 1136, height: 48, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+        <Text style={{ fontSize: 14, color: DIM }}>Training Failure Triage · AI Builder Cup 2026</Text>
+        <Text style={{ fontFamily: MONO, fontSize: 14, color: DIM }}>02 / 14</Text>
+    </Box>
+</Slide>

@@ -58,8 +58,9 @@
         "class": "config",
         "root_cause": "microbatch 提到 4 后激活值超出单卡容量，属资源配置问题；硬件侧完全干净",
         "should_rma": false,
-        "key_tool": "estimate_memory"
-      }
+      "key_tool": "estimate_memory",
+      "trap": "★ 最容易被判成「显存不够，这张卡不行了」。但同一张卡在更小 batch 下能跑通——判别依据是「同一张卡在两种配置下的表现差」，而不是 OOM 报错本身。改配置即可，不该动硬件"
+    }
     },
     {
       "id": "case-oom-fragmentation",
@@ -114,8 +115,9 @@
         "class": "config",
         "root_cause": "已保留但未分配的显存有 5.81 GiB，却凑不出 1.20 GiB 连续空间——典型内存碎片，不是显存总量不足",
         "should_rma": false,
-        "key_tool": "search_failure_signature"
-      }
+      "key_tool": "search_failure_signature",
+      "trap": "★ 与上一个案例同为 OOM，但根因不同：一个是总量不足、一个是碎片。两者都改配置就能解决、都不该动硬件，但**改的参数不是同一个**——把两个 OOM 当同一件事处理，就会改错参数"
+    }
     },
     {
       "id": "case-nccl-nvlink",
@@ -297,8 +299,9 @@
         "class": "environment",
         "root_cause": "驱动 535 只支持到 CUDA 12.2，而镜像带的是 CUDA 12.6 运行时；报错里的 12020 正是 12.2 的编码",
         "should_rma": false,
-        "key_tool": "check_compat"
-      }
+      "key_tool": "check_compat",
+      "trap": "★ 容易被归成「硬件不兼容」或「这批卡有问题」。其实驱动和卡都没问题：是**容器镜像里的 CUDA 运行时**超过了驱动支持上限。改镜像即可——查硬件方向会白花一周"
+    }
     },
     {
       "id": "case-xid48-dbe",
@@ -573,8 +576,9 @@
         "class": "hardware",
         "root_cause": "Xid 79 表示 GPU 已无法经 PCIe 被驱动访问。同槽位近 7 天有 4 次 correctable AER 而其他槽位为 0，指向 PCIe 链路/槽位问题，需硬件处理",
         "should_rma": true,
-        "key_tool": "lookup_xid"
-      }
+      "key_tool": "lookup_xid",
+      "trap": "★ 与「驱动掉了」那一组症状相似（都是访问不到卡），但这里设备已经**从 PCI 总线上消失**。这一条必须报修，而且重装驱动永远修不好——两组案例放在一起，就是为了说明「同一句报错可以有两个相反的答案」"
+    }
     },
     {
       "id": "case-gsp-119",

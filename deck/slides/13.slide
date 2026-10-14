@@ -1,0 +1,65 @@
+// 13 · 五层，一条规矩 —— 左架构堆叠 + 右单条纪律
+const FONT = 'Inter, "Helvetica Neue", Arial, sans-serif';
+const MONO = '"JetBrains Mono", "SF Mono", Menlo, monospace';
+const INK = '#0B1220';
+const BLUE = '#2F6BFF';
+const PANEL = '#F1F4FA';
+const DIM = '#64748B';
+const BODY = '#1A2434';
+
+const LAYERS = [
+    { no: '01', t: 'Knowledge base', d: '24 Xid entries · 27 failure signatures · 6 diagnostic principles' },
+    { no: '02', t: 'Deterministic pre-analysis', d: 'version stack, memory accounting, structured facts — no model involved' },
+    { no: '03', t: 'Tools', d: '10 registered · 6 exposed in single triage · 10 in shift patrol' },
+    { no: '04', t: 'Model loop', d: 'Gemini · at most 12 tool turns · calls already made are carried over if the model is swapped mid-shift' },
+    { no: '05', t: 'Execution', d: 'low risk only, then the value is re-read and logged' },
+];
+
+<Slide style={{ width: 1280, height: 720, padding: '18px 72px', background: '#FFFFFF', fontFamily: FONT }}>
+    <Box style={{ width: 1136, height: 92, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end' }}>
+        <Text style={{ fontSize: 34, fontWeight: 700, color: INK, lineHeight: 1.3 }}>Five layers, one rule</Text>
+        <Text style={{ fontFamily: MONO, fontSize: 14, color: DIM, lineHeight: 1.45 }}>Architecture</Text>
+    </Box>
+
+    <Box style={{ width: 1136, height: 544, flexDirection: 'row', gap: 36 }}>
+
+        <Box style={{ width: 704 }}>
+            {LAYERS.map((l, i) => (
+                <Box key={i} style={{
+                    width: 704, height: 96, marginBottom: i < 4 ? 10 : 0, paddingLeft: 16, paddingRight: 16,
+                    background: i === 3 ? 'rgba(47,107,255,0.07)' : PANEL, borderRadius: 6,
+                    borderLeft: '4px solid ' + (i === 3 ? BLUE : '#C3CFE2'),
+                    flexDirection: 'row', alignItems: 'center', gap: 18,
+                }}>
+                    <Text style={{ fontFamily: MONO, fontSize: 14, fontWeight: 700, color: i === 3 ? BLUE : DIM, width: 30 }}>{l.no}</Text>
+                    <Box style={{ width: 620 }}>
+                        <Text style={{ fontSize: 19, fontWeight: 600, color: INK, lineHeight: 1.35 }}>{l.t}</Text>
+                        <Text style={{ fontSize: 14, color: DIM, lineHeight: 1.5, marginTop: 3 }}>{l.d}</Text>
+                    </Box>
+                </Box>
+            ))}
+        </Box>
+
+        <Box style={{ width: 396 }}>
+            <Text style={{ fontSize: 22, fontWeight: 600, color: INK, lineHeight: 1.45 }}>One rule, enforced twice</Text>
+            <Text style={{ fontSize: 16, color: BODY, lineHeight: 1.65, marginTop: 14, width: 396 }}>
+                Numbers must come from a tool. Risk levels must come from the action library.
+                The model is not allowed to declare either one.
+            </Text>
+            <Text style={{ fontSize: 16, color: BODY, lineHeight: 1.65, marginTop: 14, width: 396 }}>
+                Both rules are written in the prompt and re-checked in code. The prompt exists so the model
+                understands the system; the code is what makes the rule hold.
+            </Text>
+            <Box style={{ width: 396, height: 1, background: '#E6EBF3', marginTop: 22, marginBottom: 22 }} />
+            <Text style={{ fontSize: 19, fontWeight: 700, color: INK, lineHeight: 1.5, width: 396 }}>
+                Prompt rules can be argued with.<br />Code cannot.
+            </Text>
+        </Box>
+
+    </Box>
+
+    <Box style={{ width: 1136, height: 48, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+        <Text style={{ fontSize: 14, color: DIM }}>A mode is a capability boundary: the tool list is cut to the mode before the loop starts</Text>
+        <Text style={{ fontFamily: MONO, fontSize: 14, color: DIM }}>13 / 14</Text>
+    </Box>
+</Slide>
