@@ -16,7 +16,7 @@
 ## 录制前检查
 
 - [ ] 服务已部署到 Cloud Run，拿到可公开访问的 URL
-- [ ] `GEMINI_API_KEY` 已配置为 Cloud Run Secret，页面显示「由 gemini-2.5-flash 自主调用工具生成」
+- [ ] `GEMINI_API_KEY` 已配置为 Cloud Run Secret，页面显示「由 gemini-3.8-flash 自主调用工具生成」
 - [ ] **确认页面上「AI 的工具调用轨迹」有内容**（若显示「离线模式未调用工具」，说明密钥没生效，先修）
 - [ ] 浏览器缩放调到 110%，地址栏与书签栏隐藏（`Cmd+Shift+B`）
 - [ ] 关闭所有通知（勿扰模式）

@@ -108,6 +108,21 @@ API 面锁死（禁用 BigQuery / Pub/Sub / Cloud Functions）、临时文件系
 
 ## 成本预期
 
+### Gemini API：免费层即可，**不需要绑卡**
+
+2026-10-14 实测（项目 `project-edb676e1-5c4e-4573-b16`，未绑任何结算账号）：
+
+| 项目 | 实测值 |
+|---|---|
+| 配额指标 | `generativelanguage.googleapis.com/generate_content_free_tier_requests` |
+| 限额 | **5 请求 / 分钟 / 项目 / 模型** |
+| 是否需要结算 | **不需要**，`FreeTier` 配额正常放行 |
+| 可用模型 | `gemini-3.8-flash`（`gemini-2.5-flash` 已对新用户下线，返回 404） |
+
+→ 如果只是为了调模型，**完全不需要绑卡**。绑卡的唯一原因是把服务托管到 Cloud Run。
+
+### Cloud Run
+
 Cloud Run 免费额度（按请求计费型，按结算账号汇总、每月重置）：
 
 | 项目 | 每月免费额度 |

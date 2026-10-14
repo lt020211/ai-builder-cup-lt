@@ -151,7 +151,7 @@ gcloud run services replace deploy/service.yaml --region=$REGION
 {
   "ai": {
     "mode": "gemini | offline | fallback",
-    "model": "gemini-2.5-flash",
+    "model": "gemini-3.8-flash",
     "text": "模型生成的诊断文本",
     "tool_calls": [{"name": "query_metrics", "args": {...}}],
     "actions": [{
@@ -229,6 +229,13 @@ curl -s -X POST http://127.0.0.1:8080/api/analyze \
 5. **碳感知调度假设负载可平移**：对训练任务而言，只有具备 checkpoint 续训能力的任务才真正可延后；
    本项目把「可延后性」作为待补数据列出，没有擅自假设所有任务都能挪时段。
 6. 卡时单价为估算值，需按实际采购/租赁台账校准。
+7. **Gemini 免费层配额很紧，且模型名会下线**（2026-10-14 实测）：
+   - 配额为 **5 请求/分钟/项目/模型**（`GenerateRequestsPerMinutePerProjectPerModel-FreeTier`）。
+     一次分析本身就要多个回合，因此 `ai.py` 内建了 429 退避重试，提示词也要求模型在单回合内并行调用工具。
+   - `gemini-2.5-flash` 已**对新用户下线**（返回 404），当前默认模型为 `gemini-3.8-flash`。
+     若日后再次报 404，用 `curl "https://generativelanguage.googleapis.com/v1beta/models?key=$KEY"` 列一遍再改
+     `GEMINI_MODEL` 即可，改环境变量不需要动代码。
+   - 演示时避免连点「分析」按钮；单次分析已在配额内，但连续多次会触发限流（表现为前端等待时间变长，随后仍会正常给出结果）。
 
 以上限制在技术评审环节会被问到，本文档直接列为已知边界而非回避。
 

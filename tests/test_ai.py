@@ -10,7 +10,18 @@ import unittest
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from src.ai import build_prompt, diagnose, offline_actions, offline_diagnosis  # noqa: E402
+from src.ai import (  # noqa: E402
+    DEFAULT_MODEL,
+    MAX_RETRIES,
+    MAX_TOOL_TURNS,
+    REQUEST_TIMEOUT_SEC,
+    RETRY_DEFAULT_WAIT_SEC,
+    _retry_wait_seconds,
+    build_prompt,
+    diagnose,
+    offline_actions,
+    offline_diagnosis,
+)
 
 FAKE_SUMMARY = {
     "record_count": 3,
@@ -129,6 +140,49 @@ class TestBuildPrompt(unittest.TestCase):
         self.assertNotIn("{findings_json}", prompt)
         self.assertIn("n-idle", prompt)
         self.assertIn("不要编造数据中没有的数字", prompt)
+
+    def test_prompt_asks_for_batched_tool_calls(self):
+        """免费层只有 5 请求/分钟，提示词必须要求模型在单回合内并行调用工具。"""
+        prompt = build_prompt(FAKE_SUMMARY, FAKE_FINDINGS)
+        self.assertIn("同一个回合", prompt)
+
+
+class TestModelConfig(unittest.TestCase):
+    def test_default_model_is_not_the_retired_one(self):
+        """守护：gemini-2.5-flash 于 2026-10 对新用户下线，默认值不得回退到它。"""
+        self.assertNotEqual(DEFAULT_MODEL, "gemini-2.5-flash")
+        self.assertTrue(DEFAULT_MODEL.startswith("gemini-"))
+
+    def test_tool_turn_cap_stays_small(self):
+        """免费层 5 rpm，回合上限不能太大，否则一次分析就会自我限流。"""
+        self.assertLessEqual(MAX_TOOL_TURNS, 8)
+
+
+class TestRetryBackoff(unittest.TestCase):
+    def test_parses_google_suggested_delay(self):
+        """从 429 响应体里解析 'Please retry in 2.32s'，并在其基础上多留 1 秒余量。"""
+        body = (
+            '{"error":{"code":429,"message":"You exceeded your current quota. '
+            'Please retry in 2.321217862s."}}'
+        )
+        self.assertAlmostEqual(_retry_wait_seconds(body), 3.321217862, places=4)
+
+    def test_floor_is_applied_for_very_small_delays(self):
+        self.assertAlmostEqual(_retry_wait_seconds("retry in 0.1s"), 2.0, places=4)
+
+    def test_falls_back_when_delay_absent(self):
+        for body in ("", "no hint here", '{"error":{"code":429}}'):
+            self.assertEqual(_retry_wait_seconds(body), RETRY_DEFAULT_WAIT_SEC)
+
+
+class TestTimeoutBudget(unittest.TestCase):
+    def test_worst_case_fits_inside_cloud_run_timeout(self):
+        """最坏情况（每次都超时 + 每次都 429）总耗时必须小于 Cloud Run 的 300s。
+
+        否则重试还没走完，平台就先把请求掐断了——用户只会看到 504，且拿不到离线降级结果。
+        """
+        worst = (MAX_RETRIES + 1) * REQUEST_TIMEOUT_SEC + MAX_RETRIES * RETRY_DEFAULT_WAIT_SEC
+        self.assertLess(worst, 300, f"最坏耗时 {worst}s 已超出 Cloud Run 的 300s 超时")
 
 
 if __name__ == "__main__":

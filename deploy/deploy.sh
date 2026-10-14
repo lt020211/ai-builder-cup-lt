@@ -117,9 +117,9 @@ $GCLOUD run deploy "$SERVICE" \
   --max-instances 3 \
   --cpu 1 \
   --memory 512Mi \
-  --timeout 180 \
+  --timeout 300 \
   --concurrency 40 \
-  --set-env-vars "GEMINI_MODEL=gemini-2.5-flash" \
+  --set-env-vars "GEMINI_MODEL=gemini-3.8-flash" \
   ${SECRET_FLAG[@]+"${SECRET_FLAG[@]}"}
 
 # ---------------------------------------------------------------- 验证

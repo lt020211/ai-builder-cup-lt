@@ -16,6 +16,8 @@ from __future__ import annotations
 
 import json
 import os
+import re
+import time
 import urllib.error
 import urllib.request
 from pathlib import Path
@@ -26,9 +28,23 @@ from src.tools import TOOL_SPECS, ToolState, dispatch_tool
 
 PROMPT_PATH = Path(__file__).resolve().parent / "prompts" / "diagnose.md"
 GEMINI_ENDPOINT = "https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
-DEFAULT_MODEL = "gemini-2.5-flash"
-REQUEST_TIMEOUT_SEC = 90
-MAX_TOOL_TURNS = 8
+
+# 模型名会随 Google 的下线策略变化。2026-10-14 实测：
+#   gemini-2.5-flash → 404「no longer available to new users」（对新用户已下线）
+#   gemini-3.8-flash → 可用
+# 若日后报 404，可用 `curl ".../v1beta/models?key=$KEY"` 列一遍再改这里，或设 GEMINI_MODEL 覆盖。
+DEFAULT_MODEL = "gemini-3.8-flash"
+
+# 超时预算：单次请求 60s。配合 MAX_RETRIES=2，最坏情况
+# 3×60s + 2×16s ≈ 212s，仍小于 Cloud Run 的 300s 超时（见 deploy/service.yaml）。
+REQUEST_TIMEOUT_SEC = 60
+
+# 免费层实测配额：5 请求/分钟/项目/模型（quotaId ...FreeTier）。
+# 一次分析本身就要多个回合，所以必须退避重试，否则第二个回合就会 429。
+MAX_TOOL_TURNS = 6
+MAX_RETRIES = 2
+RETRY_DEFAULT_WAIT_SEC = 15.0
+_RETRY_IN_RE = re.compile(r"retry in ([0-9.]+)\s*s", re.IGNORECASE)
 
 
 def _settings() -> Dict[str, str]:
@@ -58,17 +74,53 @@ def build_prompt(
 
 
 # ------------------------------------------------------------------ 网络
+def _retry_wait_seconds(error_body: str) -> float:
+    """从 429 响应体里解析 Google 建议的等待秒数，解析不到就用默认值。
+
+    免费层 5 rpm 的响应形如：... "Please retry in 2.321217862s."
+    """
+    match = _RETRY_IN_RE.search(error_body or "")
+    if match:
+        try:
+            return max(float(match.group(1)), 1.0) + 1.0   # 多等 1 秒避免边界抖动
+        except ValueError:
+            pass
+    return RETRY_DEFAULT_WAIT_SEC
+
+
 def _post_gemini(
     payload: Dict[str, Any], model: str, api_key: str, timeout: int = REQUEST_TIMEOUT_SEC
 ) -> Dict[str, Any]:
-    request = urllib.request.Request(
-        GEMINI_ENDPOINT.format(model=model),
-        data=json.dumps(payload).encode("utf-8"),
-        headers={"Content-Type": "application/json", "x-goog-api-key": api_key},
-        method="POST",
-    )
-    with urllib.request.urlopen(request, timeout=timeout) as response:
-        return json.loads(response.read().decode("utf-8"))
+    """POST 到 Gemini。
+
+    对 429（免费层每模型每分钟 5 次）做退避重试——一次分析要多个回合，
+    不重试的话第二个回合必然失败。其它错误直接抛出，由上层降级为离线模板。
+    """
+    body = json.dumps(payload).encode("utf-8")
+    last_error: Optional[urllib.error.HTTPError] = None
+
+    for attempt in range(MAX_RETRIES + 1):
+        request = urllib.request.Request(
+            GEMINI_ENDPOINT.format(model=model),
+            data=body,
+            headers={"Content-Type": "application/json", "x-goog-api-key": api_key},
+            method="POST",
+        )
+        try:
+            with urllib.request.urlopen(request, timeout=timeout) as response:
+                return json.loads(response.read().decode("utf-8"))
+        except urllib.error.HTTPError as exc:
+            if exc.code != 429 or attempt >= MAX_RETRIES:
+                raise
+            last_error = exc
+            try:
+                detail = exc.read().decode("utf-8", "replace")
+            except Exception:      # noqa: BLE001 - 读错误体失败不应掩盖原始异常
+                detail = ""
+            wait = _retry_wait_seconds(detail)
+            time.sleep(wait)
+
+    raise last_error if last_error else RuntimeError("Gemini 请求失败")
 
 
 def _agentic_diagnose(

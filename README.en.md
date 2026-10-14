@@ -149,7 +149,7 @@ AI-related fields in the `/api/analyze` response (values below are the **actual*
 {
   "ai": {
     "mode": "gemini | offline | fallback",
-    "model": "gemini-2.5-flash",
+    "model": "gemini-3.8-flash",
     "text": "diagnosis text produced by the model",
     "tool_calls": [{"name": "query_metrics", "args": {}}],
     "actions": [{

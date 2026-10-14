@@ -19,14 +19,14 @@ spec:
         autoscaling.knative.dev/maxScale: "3"
     spec:
       containerConcurrency: 40
-      timeoutSeconds: 180
+      timeoutSeconds: 300
       containers:
         - image: asia-east1-docker.pkg.dev/PROJECT_ID/REPO/gpu-waste-auditor:latest
           ports:
             - containerPort: 8080
           env:
             - name: GEMINI_MODEL
-              value: gemini-2.5-flash
+              value: gemini-3.8-flash
             - name: GEMINI_API_KEY
               valueFrom:
                 secretKeyRef:
