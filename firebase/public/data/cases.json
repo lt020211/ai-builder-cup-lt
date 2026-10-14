@@ -1,8 +1,8 @@
 {
   "meta": {
     "note": "演示案例集。所有报错文本、版本号组合与遥测字段均按真实生产环境的形态构造：报错原文取自常见框架输出格式，Xid 语义与处置建议来自公开权威资料（见 js/kb.js 中每条 source）。节点名与用户名为演示用标识。",
-    "telemetry_note": "node_telemetry 的字段语义对齐 nvidia-smi / DCGM 的常见口径，但数值为演示数据。每个案例在页面上都会显式标注「遥测为演示数据」，避免与真实监控混淆。",
-    "count": 10
+    "telemetry_note": "node_telemetry 的字段语义对齐 nvidia-smi / DCGM 的常见口径，但数值为演示数据。每个案例在页面上都会显式标注「遥测为演示数据」，避免与真实监控混淆。 驱动掉线与 GPU 卡死两组案例均成对设计，用于演示「症状相同、根因相反」的判别。",
+    "count": 14
   },
   "cases": [
     {
@@ -646,6 +646,234 @@
         "should_rma": false,
         "key_tool": "lookup_xid",
         "trap": "不要因为出现两个 Xid 码就判定「多张卡故障」或直接重启整节点"
+      }
+    },
+    {
+      "id": "case-driver-nvml-mismatch",
+      "title": "集群巡检发现 nvidia-smi 用不了",
+      "subtitle": "昨晚自动升级跑过 ｜ 没重启 ｜ 8 张卡都在位",
+      "evidence": {
+        "reported_at": "2026-10-13T08:41:12+08:00",
+        "job": {
+          "name": "nightly-pretrain",
+          "user": "chenyu",
+          "node": "lyg2111",
+          "gpu_count": 8,
+          "gpu_type": "H800",
+          "start_hour": 8,
+          "runtime_hours": 0.1,
+          "status": "failed"
+        },
+        "command": "nvidia-smi",
+        "stderr_excerpt": "Failed to initialize NVML: Driver/library version mismatch\nNVML library version: 535.183.06\n\nsyslog:\nNVRM: API mismatch: the client has the version 535.183.06,\nNVRM: but this kernel module has the version 535.183.01. Please\nNVRM: make sure that this kernel module and all NVIDIA driver\nNVRM: components have the same version.\n\nlspci | grep -i nvidia:\n4d:00.0 3D controller: NVIDIA Corporation Device 2324 (rev a1)\n5a:00.0 3D controller: NVIDIA Corporation Device 2324 (rev a1)\n（8 个设备全部在位）",
+        "docker_image": "",
+        "environment": {
+          "driver": "535.183.06",
+          "cuda_runtime": "12.2",
+          "torch": "2.3.1+cu121",
+          "nccl": "2.20.5",
+          "python": "3.10.14"
+        },
+        "training_config": {
+          "model_params_b": 7,
+          "precision": "bf16"
+        },
+        "node_telemetry": {
+          "window": "08:00-08:45",
+          "xid_events": [],
+          "ecc_uncorrectable": 0,
+          "ecc_correctable": 14,
+          "clock_throttle": "none",
+          "pcie_aer": null,
+          "note": "无任何 Xid 事件；8 张卡全部在 PCI 总线上；该节点昨晚被 unattended-upgrade 改过 NVIDIA 用户态包，之后未重启"
+        }
+      },
+      "expected": {
+        "class": "environment",
+        "root_cause": "用户态驱动包已升到 535.183.06，但内核里仍是 535.183.01 的模块——一次半完成的自动升级。重启即可对齐，与硬件无关",
+        "should_rma": false,
+        "key_tool": "search_failure_signature",
+        "trap": "与下一个案例外观极其相似。判别依据是：设备是否还在 PCI 总线上、有没有 Xid"
+      }
+    },
+    {
+      "id": "case-smi-driver-dead",
+      "title": "nvidia-smi 彻底不通，卡也不见了",
+      "subtitle": "同样的报错 ｜ 但 dmesg 里有 Xid 79",
+      "evidence": {
+        "reported_at": "2026-10-13T02:17:33+08:00",
+        "job": {
+          "name": "long-run-pretrain",
+          "user": "zhoujie",
+          "node": "lyg2107",
+          "gpu_count": 8,
+          "gpu_type": "A800",
+          "start_hour": 22,
+          "runtime_hours": 4.2,
+          "status": "failed"
+        },
+        "command": "nvidia-smi",
+        "stderr_excerpt": "NVIDIA-SMI has failed because it couldn't communicate with the NVIDIA driver. Make sure that the latest NVIDIA driver is installed and running.\n\n重装驱动后仍然报同样的错误。\n\ndmesg:\nNVRM: Xid (PCI:0000:4d:00): 79, pid=28613, GPU has fallen off the bus.\nNVRM: RmInitAdapter failed! (0x26:0xffff:1544)\n\nlspci | grep -i nvidia:\n5a:00.0 3D controller: NVIDIA Corporation Device 20b2 (rev a1)\n（只有 7 个设备，4d:00 已消失）",
+        "docker_image": "",
+        "environment": {
+          "driver": "550.54.14",
+          "cuda_runtime": "12.4",
+          "torch": "2.4.1+cu124",
+          "nccl": "2.21.5",
+          "python": "3.11.9"
+        },
+        "training_config": {
+          "model_params_b": 13,
+          "precision": "bf16"
+        },
+        "node_telemetry": {
+          "window": "22:00-02:20",
+          "xid_events": [
+            {
+              "code": 79,
+              "count": 1,
+              "first_at": "02:16",
+              "last_at": "02:16",
+              "pci": "0000:4d:00"
+            }
+          ],
+          "ecc_uncorrectable": 0,
+          "ecc_correctable": 11,
+          "clock_throttle": "none",
+          "pcie_aer": "该槽位近 7 天记录 5 次 correctable AER，同机其他槽位为 0",
+          "note": "4d:00 已从 PCI 总线消失；该槽位 AER 计数显著高于同机其他槽位"
+        }
+      },
+      "expected": {
+        "class": "hardware",
+        "root_cause": "报错文本与上一个案例几乎一样，但 dmesg 有 Xid 79、设备已从 lspci 消失、重装驱动无效——这是 PCIe 链路/槽位硬件故障，软件手段无法恢复",
+        "should_rma": true,
+        "key_tool": "inspect_node",
+        "trap": "★ 「症状≠根因」的最佳教材：两句报错一模一样，一个重启就好、一个必须换硬件"
+      }
+    },
+    {
+      "id": "case-gpu-hang-xid62",
+      "title": "训练卡死不动，利用率却满格",
+      "subtitle": "进度条 40 分钟没动 ｜ 内核有 Xid 62",
+      "evidence": {
+        "reported_at": "2026-10-12T04:52:08+08:00",
+        "job": {
+          "name": "llm-pretrain-mix",
+          "user": "liuyang",
+          "node": "lyg2104",
+          "gpu_count": 8,
+          "gpu_type": "H20",
+          "start_hour": 1,
+          "runtime_hours": 3.8,
+          "status": "hanging"
+        },
+        "command": "torchrun --nproc_per_node=8 train.py --micro-batch 4 --seq-len 4096 --tp 4 --dp 2",
+        "stderr_excerpt": "step 1820 loss 2.4183\nstep 1821 loss 2.4151\nstep 1822 loss 2.4096\n（此后 40 分钟无任何输出）\n\n用户排查：\n$ nvidia-smi\n（该命令本身耗时 90 秒才返回，之后 GPU-Util 全部显示 100%）\n\n$ ps -eo pid,stat,wchan,etime,args | grep torchrun\n31884 D  nv_open        03:52 python3 -m torch.distributed.run ...\n31891 R  -              03:52 python3 -m torch.distributed.run ...\n\n$ timeout 5 nvidia-smi --gpu-reset -i 3\nUnable to reset the GPU: In use by another client\n\ndmesg:\nNVRM: Xid (PCI:0000:3b:00): 62, pid=31884, name=python3, Internal Micro-controller Halt",
+        "docker_image": "registry.local/pytorch:2.4.1-cu124-nccl2.21",
+        "environment": {
+          "driver": "550.54.14",
+          "cuda_runtime": "12.4",
+          "torch": "2.4.1+cu124",
+          "nccl": "2.21.5",
+          "python": "3.11.9"
+        },
+        "training_config": {
+          "model_params_b": 32,
+          "precision": "bf16",
+          "batch_size": 4,
+          "seq_len": 4096,
+          "hidden_size": 7168,
+          "num_layers": 60,
+          "tp": 4,
+          "dp": 2,
+          "zero_stage": 2,
+          "recompute": false,
+          "flash_attn": true,
+          "gpu_type": "H20"
+        },
+        "node_telemetry": {
+          "window": "01:00-05:00",
+          "xid_events": [
+            {
+              "code": 62,
+              "count": 2,
+              "first_at": "04:11",
+              "last_at": "04:12",
+              "pci": "0000:3b:00"
+            }
+          ],
+          "ecc_uncorrectable": 0,
+          "ecc_correctable": 21,
+          "clock_throttle": "none",
+          "gsp_firmware": "550.54.14（与驱动同版本）",
+          "note": "同批其他 3 台 H20 节点驱动为 555.42.02，仅本节点是 550.54.14"
+        }
+      },
+      "expected": {
+        "class": "environment",
+        "root_cause": "Xid 62（内部微控制器挂起）是 GPU 卡死的内核侧证据，不是应用问题；进程 D 状态阻塞在 nv_open 也印证卡在驱动层。同批节点驱动版本不一致，应先按驱动/固件方向处理，而不是去改训练代码",
+        "should_rma": false,
+        "key_tool": "inspect_node",
+        "trap": "看到「训练不动」就去查代码是最常见的错误方向"
+      }
+    },
+    {
+      "id": "case-gpu-hang-deadlock",
+      "title": "训练卡死，但内核干干净净",
+      "subtitle": "同样的卡死症状 ｜ 零 Xid ｜ 进程并非 D 状态",
+      "evidence": {
+        "reported_at": "2026-10-12T19:26:41+08:00",
+        "job": {
+          "name": "multimodal-sft",
+          "user": "wangfang",
+          "node": "lyg2108",
+          "gpu_count": 16,
+          "gpu_type": "H100",
+          "start_hour": 17,
+          "runtime_hours": 2.4,
+          "status": "hanging"
+        },
+        "command": "torchrun --nnodes=2 --nproc_per_node=8 train.py --micro-batch 2 --seq-len 2048 --tp 2 --dp 8",
+        "stderr_excerpt": "step 640 loss 1.8821\nstep 641 loss 1.8794\n（此后 25 分钟无输出，但只有 2 个 rank 静默）\n\n[rank 11] Watchdog caught collective operation timeout: WorkNCCL(SeqNum=6410, OpType=ALLGATHER, Timeout(ms)=600000) ran for 601220 milliseconds before timing out.\n[rank 11] NCCL error: unhandled system error\n（其余 rank 报同样的超时，但 rank 4 与 rank 11 最早）\n\n用户排查：\n$ ps -eo pid,stat,wchan,etime,args | grep torchrun\n40221 S  futex_wait_queue  02:24 python3 -m torch.distributed.run ...\n40233 S  futex_wait_queue  02:24 python3 -m torch.distributed.run ...\n（全部为 S 状态，没有 D 状态进程）\n\n$ dmesg -T | grep -i 'NVRM: Xid'\n（无任何输出）\n\n$ nvidia-smi\n（秒回，8 卡利用率均为 0%，显存仍占用）",
+        "docker_image": "registry.local/pytorch:2.4.1-cu124-nccl2.21",
+        "environment": {
+          "driver": "550.54.14",
+          "cuda_runtime": "12.4",
+          "torch": "2.4.1+cu124",
+          "nccl": "2.21.5",
+          "python": "3.11.9"
+        },
+        "training_config": {
+          "model_params_b": 8,
+          "precision": "bf16",
+          "batch_size": 2,
+          "seq_len": 2048,
+          "hidden_size": 4096,
+          "num_layers": 32,
+          "tp": 2,
+          "dp": 8,
+          "zero_stage": 2,
+          "recompute": false,
+          "flash_attn": true,
+          "gpu_type": "H100"
+        },
+        "node_telemetry": {
+          "window": "17:00-19:30",
+          "xid_events": [],
+          "ecc_uncorrectable": 0,
+          "ecc_correctable": 7,
+          "clock_throttle": "none",
+          "pcie_aer": null,
+          "note": "节点硬件侧完全干净：无 Xid、无 AER、无降频；nvidia-smi 秒回说明驱动响应正常"
+        }
+      },
+      "expected": {
+        "class": "application",
+        "root_cause": "卡死但内核零 Xid、nvidia-smi 秒回、进程处于 S 状态（futex 等待）而非 D 状态——说明 GPU 与驱动都正常，是应用层在集合通信上互相等待。且只有 rank 4/11 最先超时，指向代码里按 rank 分支的逻辑",
+        "should_rma": false,
+        "key_tool": "inspect_node",
+        "trap": "★ 与上一个案例构成对照：同样是「训练卡死」，一个查驱动、一个查代码，判别依据是内核是否干净、进程是否为 D 状态"
       }
     }
   ]

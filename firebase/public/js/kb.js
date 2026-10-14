@@ -141,6 +141,11 @@ export const XID_TABLE = {
       '**不要等同于 OOM**，也不要直接判定硬件故障。',
     action: '查看应用日志与前序 Xid；重启任务进程，修复触发异常的代码。',
     rma: false,
+    divergence:
+      '★ 各权威资料对 Xid 43 的归类**存在分歧**：NVIDIA 运维知识库与阿里云 ACK 官方文档' +
+      '都判为「应用自身错误，非硬件问题」；而另一份开源诊断表判为「硬件/驱动，常见于' +
+      '严重 ECC 错误之后」。**这不是知识库的缺陷，而是分诊必须存在的原因**——' +
+      '遇到 43 必须回查同一时段是否还有 48 / 95 / 79 这类硬指标：有则按硬件处理，无则按应用处理。',
     source: 'https://ai-infrastructure.net/reliability-ras',
   },
   45: {
@@ -168,6 +173,21 @@ export const XID_TABLE = {
     rma: true,
     source: 'https://docs.nvidia.com/deploy/xid-errors/',
   },
+  62: {
+    name: '内部微控制器挂起（PMU halt）',
+    name_en: 'Internal Micro-controller Halt (PMU_HALT_ERROR)',
+    class: 'environment',
+    severity: 'degrading',
+    meaning:
+      'GPU 内部调度器挂起，通常在驱动发生严重竞争或溢出时出现。' +
+      '这是「GPU 卡死」在内核侧最常见的证据——训练进程 hang 住不动、' +
+      '而 nvidia-smi 显示的利用率却挂在 100%。',
+    action:
+      '收集驱动与固件版本并按恢复动作处理。**若与 Xid 79 同现或反复出现，' +
+      '升级为硬件方向排查。**',
+    rma: null,
+    source: 'https://www.netdata.cloud/guides/nvidia-gpu/nvidia-gpu-xid-errors',
+  },
   63: {
     name: 'ECC 页退役 / 行重映射事件',
     name_en: 'ECC page retirement / row remapping event',
@@ -191,6 +211,26 @@ export const XID_TABLE = {
     action: '限制该资源继续接单，立即升级并按恢复指引处理；不要只累计次数观察。',
     rma: true,
     source: 'https://docs.nvidia.com/deploy/xid-errors/',
+  },
+  65: {
+    name: 'ECC 模式变更通知',
+    name_en: 'ECC mode change notification',
+    class: 'hardware_watch',
+    severity: 'watch',
+    meaning: 'ECC 的工作模式发生了变化。这是通知类事件，本身不代表故障。',
+    action: '记录即可，无需立即处置。',
+    rma: false,
+    source: 'https://www.netdata.cloud/guides/nvidia-gpu/nvidia-gpu-xid-errors',
+  },
+  69: {
+    name: '图形引擎 class 错误',
+    name_en: 'Graphics engine class error',
+    class: 'application',
+    severity: 'degrading',
+    meaning: '应用对引擎 API 的误用，属于代码侧问题。',
+    action: '检查应用的 API 调用是否越界或传入了非法参数。',
+    rma: false,
+    source: 'https://www.netdata.cloud/guides/nvidia-gpu/nvidia-gpu-xid-errors',
   },
   74: {
     name: 'NVLink 异常',
@@ -216,6 +256,19 @@ export const XID_TABLE = {
       '隔离受影响资源，收集 PCIe AER、供电与 BMC 证据；重插/换槽位后仍失败则报修。',
     rma: true,
     source: 'https://docs.nvidia.com/deploy/xid-errors/',
+  },
+  92: {
+    name: '单比特 ECC 错误率偏高',
+    name_en: 'High single-bit ECC error rate',
+    class: 'hardware_watch',
+    severity: 'watch',
+    meaning:
+      '可纠正（单比特）ECC 错误的发生率超出正常水平。' +
+      '**这是一个前兆指标**：加速上升的 SBE 速率往往先于不可纠正错误（DBE）出现。',
+    action:
+      '不需立即处置，但**必须做趋势跟踪**——按周观察速率是否在加速，而不是只看绝对值。',
+    rma: false,
+    source: 'https://www.netdata.cloud/guides/nvidia-gpu/nvidia-gpu-xid-errors',
   },
   93: {
     name: 'InfoROM 写入寿命上限（非致命）',
@@ -253,6 +306,18 @@ export const XID_TABLE = {
     action: '复位 GPU；若 94 频次同步上升，判定劣化超限，走 RMA。',
     rma: true,
     source: 'https://docs.nvidia.com/deploy/xid-errors/',
+  },
+  109: {
+    name: '上下文切换超时',
+    name_en: 'Context switch timeout',
+    class: 'hardware_watch',
+    severity: 'watch',
+    meaning:
+      '**本身不致命，但它是明确的前兆指标。**公开运维资料指出：它常在更严重错误' +
+      '出现前数分钟到数小时内发生，因此应当被当作预警信号，而不是孤立的噪声。',
+    action: '不单独处置；向前关联后续 Xid，向后回看该任务是否在数小时内失败。',
+    rma: null,
+    source: 'https://www.netdata.cloud/guides/nvidia-gpu/nvidia-gpu-xid-errors',
   },
   110: {
     name: '安全故障（Security fault）',
@@ -338,6 +403,71 @@ export const XID_TABLE = {
     source: 'https://docs.nvidia.com/deploy/xid-errors/',
   },
 };
+
+// ======================================================================
+// 2.5 诊断原则
+// ======================================================================
+/**
+ * 这几条比任何单个错误码都重要。
+ *
+ * 为什么单列：错误码是「事实」，原则是「怎么读事实」。一线误判绝大多数不是
+ * 因为不认识某个码，而是因为违反了下面某一条——尤其是「首发原则」和
+ * 「症状 ≠ 根因」。提示词里会强制模型先复述相关原则再下结论。
+ */
+export const DIAGNOSTIC_PRINCIPLES = [
+  {
+    id: 'first_event',
+    title: '首发原则（T0）',
+    detail:
+      '日志里爆发大量 Xid 时，必须先定位**时间最早的那一条（T0）**。' +
+      '后面那些往往只是它的连锁反应——从中间任意一条入手，都会追错根因。',
+    source:
+      'https://github.com/openeuler-mirror/witty-diagnosis-agent/blob/master/skills/offline-GPU-fault-diagnosis/references/XID_error_codes.md',
+  },
+  {
+    id: 'causal_chain',
+    title: '因果关联：次生事件不是根因',
+    detail:
+      'Xid 31 → 43 常见于显存故障导致卡停止；Xid 48 → 45 表示不可纠正错误引发了抢占式清理。' +
+      'Xid 45 与 154 尤其危险——它们**只描述后果**，把它们当根因会一路查错方向。',
+    source: 'https://www.netdata.cloud/guides/nvidia-gpu/nvidia-gpu-xid-errors',
+  },
+  {
+    id: 'symptom_vs_cause',
+    title: '症状 ≠ 根因',
+    detail:
+      '同一句报错可以对应完全不同的根因。例如「nvidia-smi 无法与驱动通信」有五种常见成因：' +
+      '内核升级后模块未重编 / Secure Boot 拦截未签名模块 / 驱动包未带 DKMS 模块 / ' +
+      '装错模块变体（把 nvidia-open 装在老卡上）/ **GPU 掉出 PCIe 总线**。' +
+      '只有最后一种是硬件故障，而它的修法与其他四种完全不同。',
+    source: 'https://www.netdata.cloud/guides/nvidia-gpu/nvidia-gpu-couldnt-communicate-with-driver',
+  },
+  {
+    id: 'trend_over_snapshot',
+    title: '趋势优先于快照',
+    detail:
+      '单次事件往往无害（例如偶发的 Xid 94），**速率变化才是信号**。' +
+      '判断「偶发观察」还是「劣化超限」，依据是 30 天频次走势与可纠正 ECC 是否同步上升。',
+    source: 'https://www.netdata.cloud/guides/nvidia-gpu/nvidia-gpu-xid-errors',
+  },
+  {
+    id: 'dont_conflate',
+    title: '不要把相似报错混为一谈',
+    detail:
+      '「NVIDIA-SMI has failed because it couldn\'t communicate with the NVIDIA driver」与' +
+      '「Failed to initialize NVML: Driver/library version mismatch」外观相似，' +
+      '但成因与修法完全不同。公开资料明确提醒**不要把两者混淆**。',
+    source: 'https://www.netdata.cloud/guides/nvidia-gpu/nvidia-gpu-couldnt-communicate-with-driver',
+  },
+  {
+    id: 'no_rma_for_app_bugs',
+    title: '应用故障不要走报修',
+    detail:
+      'Xid 13 / 31 / 43 会「跟着有 bug 的任务走」——换节点仍然复现，而硬件本身是好的。' +
+      '为这类问题走 RMA，代价是一块好卡被下线、集群容量白掉。',
+    source: 'https://ai-infrastructure.net/reliability-ras',
+  },
+];
 
 // ======================================================================
 // 3. 故障特征库
@@ -601,6 +731,215 @@ export const FAILURE_SIGNATURES = [
     check: ['对比检查点与当前模型的 state_dict 键名和形状', '确认并行度变更后是否做了权重切分/合并'],
     typical_fix: ['按新并行度重新切分检查点', '或先加载可匹配的部分再微调'],
     source: 'https://pytorch.org/docs/stable/generated/torch.load.html',
+  },
+
+  // ---------------- 驱动层与设备层（症状相似、根因跨度最大的一组） ----------------
+  {
+    id: 'smi_cannot_communicate',
+    label: 'nvidia-smi 无法与驱动通信',
+    class_hint: 'environment',
+    patterns: [
+      /NVIDIA-SMI has failed because it couldn't communicate with the NVIDIA driver/i,
+      /couldn't communicate with the NVIDIA driver/i,
+    ],
+    root_cause:
+      '用户态（NVML）到内核模块的链路断了。**至少有五种完全不同的成因**：' +
+      '① 内核升级后 NVIDIA 模块没为当前内核重编；② Secure Boot 拦下了未签名模块；' +
+      '③ 装了驱动包但 DKMS 模块缺失；④ 在 Maxwell/Pascal/Volta 老卡上装了 nvidia-open 变体；' +
+      '⑤ **GPU 已掉出 PCIe 总线（Xid 79）**。前四种重装/重编即可，第五种是硬件故障，' +
+      '重装驱动也修不好。',
+    check: [
+      'dmesg -T | grep -i nvrm —— 找模块加载失败或 Xid 79',
+      'lsmod | grep nvidia 看内核模块是否加载',
+      'dkms status 与 uname -r 比对，确认模块是否为当前内核编译',
+      'mokutil --sb-state 看 Secure Boot 是否开启',
+      'lspci -d 10de: 看 GPU 是否还在 PCI 总线上（不在 = 掉卡）',
+    ],
+    typical_fix: [
+      '先确认不是 Xid 79：如果是掉卡，走硬件流程而不是重装驱动',
+      '否则按内核模块问题处理：重建 DKMS 模块或重启',
+    ],
+    source: 'https://www.netdata.cloud/guides/nvidia-gpu/nvidia-gpu-couldnt-communicate-with-driver',
+  },
+  {
+    id: 'nvml_mismatch',
+    label: 'NVML 驱动/库版本不匹配',
+    class_hint: 'environment',
+    patterns: [
+      /Failed to initialize NVML:\s*Driver\/library version mismatch/i,
+      /NVML library version:/i,
+    ],
+    root_cause:
+      '用户态驱动包被升了，但内核里仍是旧模块——通常是一次**半完成的自动升级**造成的' +
+      '（例如 unattended-upgrade 只换了一部分包）。',
+    check: [
+      'NVRM: API mismatch 那行的两个版本号分别是多少',
+      '是否刚发生过内核升级或包自动更新',
+      '有没有重启过（重启后新旧版本会同步）',
+    ],
+    typical_fix: [
+      '重启节点即可加载新内核模块（最省事）',
+      '或按顺序卸载模块 uvm → drm → modeset → nvidia 后重装 DKMS',
+      '长效机制：把 nvidia-* 加入自动升级黑名单，避免再次半升级',
+    ],
+    source: 'https://ubuntu.com/desktop/docs/en/latest/how-to/graphics/troubleshoot-nvidia/',
+  },
+  {
+    id: 'nvrm_api_mismatch',
+    label: '内核模块与用户态组件版本不一致（API mismatch）',
+    class_hint: 'environment',
+    patterns: [
+      /NVRM:\s*API mismatch:\s*the client has the version/i,
+      /this kernel module has the version/i,
+    ],
+    root_cause:
+      '日志会直接给出两个版本号：client（用户态）与 kernel module（内核态）。' +
+      '这是 nvml_mismatch 的内核侧证据，两者通常是同一件事。',
+    check: ['读出日志里的两个版本号并对比', '确认升级是何时发生的、是否重启过'],
+    typical_fix: ['重启使内核模块与用户态对齐；随后把 nvidia-* 排除出自动升级'],
+    source: 'https://somaz.blog/category/troubleshooting/nvidia-driver-library-mismatch-resolution/',
+  },
+  {
+    id: 'smi_no_devices',
+    label: 'nvidia-smi 报找不到设备',
+    class_hint: 'environment',
+    patterns: [/No devices were found/i, /no NVIDIA GPU found/i],
+    root_cause:
+      '常见于开源的 nouveau 驱动被预装并占用，与专有驱动冲突；也可能确实是设备未上电或未识别。',
+    check: ['lsmod | grep nouveau 确认冲突驱动是否加载', 'lspci | grep -i nvidia 看设备是否被系统识别'],
+    typical_fix: ['把 nouveau 加入 blacklist 并重建 initramfs 后重启'],
+    source: 'https://ubuntu.com/desktop/docs/en/latest/how-to/graphics/troubleshoot-nvidia/',
+  },
+  {
+    id: 'cuda_devices_busy',
+    label: '所有 CUDA 设备忙或不可用',
+    class_hint: 'undetermined',
+    patterns: [
+      /all CUDA-capable devices are busy or unavailable/i,
+      /cudaErrorDevicesUnavailable/i,
+    ],
+    root_cause:
+      '设备被独占占用，或驱动层已异常。**单凭这一行无法定性**：' +
+      '可能只是别的进程占满了卡，也可能是驱动/硬件异常的早期表现。',
+    check: [
+      '用 inspect_node 看该节点同时段有无 Xid 事件',
+      'nvidia-smi 查是否有其他进程占用设备',
+      '检查容器的 visible devices 配置',
+    ],
+    typical_fix: ['先排除占用与配置问题，再考虑驱动或硬件方向'],
+    source: 'https://docs.nvidia.com/deploy/nvml-api/',
+  },
+  {
+    id: 'rm_init_adapter_failed',
+    label: '驱动初始化适配器失败',
+    class_hint: 'undetermined',
+    patterns: [/RmInitAdapter failed/i, /rm_init_adapter failed/i, /NVRM:.*RmInitAdapter/i],
+    root_cause:
+      '内核模块无法完成对 GPU 的初始化。可能是模块变体装错、固件异常，' +
+      '**也可能是 GPU 已不在总线上**。',
+    check: ['从日志里找前置的 Xid（79 / 119 / 120）', '确认该 GPU 是否还在 lspci 输出里'],
+    typical_fix: ['有前置 Xid 则按该 Xid 处理；无前置 Xid 则按驱动/固件方向排查'],
+    source: 'https://www.netdata.cloud/guides/nvidia-gpu/nvidia-gpu-couldnt-communicate-with-driver',
+  },
+  {
+    id: 'secure_boot_block',
+    label: '内核模块被拒载（签名/锁定）',
+    class_hint: 'environment',
+    patterns: [
+      /module verification failed/i,
+      /Lockdown:\s*.*(?:unsigned|signature)/i,
+      /Key was rejected by service/i,
+    ],
+    root_cause:
+      'Secure Boot 开启但未注册机器所有者密钥（MOK），内核拒绝加载未签名的 NVIDIA 模块。' +
+      '常在新装驱动或内核升级使签名失效后出现。',
+    check: ['mokutil --sb-state 确认 Secure Boot 状态', 'dmesg 里找 module verification / lockdown 记录'],
+    typical_fix: ['为模块签名并注册 MOK，或在可控集群中关闭 Secure Boot'],
+    source: 'https://www.netdata.cloud/guides/nvidia-gpu/nvidia-gpu-couldnt-communicate-with-driver',
+  },
+
+  // ---------------- GPU 卡死（hang） ----------------
+  {
+    id: 'gpu_hang_no_progress',
+    label: 'GPU 卡死：利用率满但无进展',
+    class_hint: 'undetermined',
+    patterns: [
+      /GPU hang/i,
+      /GPU stopped processing/i,
+      /hang detected/i,
+      /kernel.*timeout.*GPU/i,
+    ],
+    root_cause:
+      'GPU 停止推进工作——表现是利用率挂在 100% 但 loss / 进度长时间不更新，' +
+      '或 nvidia-smi 查询本身开始变慢。**这是最需要分诊的症状**：' +
+      '可能来自应用死锁、驱动/GSP 异常、NVLink 通信挂死，也可能是硬件挂死的前兆。' +
+      '**必须结合内核 Xid 与进程状态才能定性。**',
+    check: [
+      '查同节点同时段的 Xid（尤其 62 / 43 / 79 / 74 / 119）',
+      '查相关进程是否处于 D 状态（uninterruptible sleep）',
+      '确认是所有 rank 都卡住，还是只有部分 rank 卡住',
+      '区分「整个任务无输出」与「某个 rank 无输出」——后者指向单卡问题',
+    ],
+    typical_fix: [
+      '有 Xid 62 / 79 等内核侧证据 → 按驱动或硬件方向处理',
+      '无任何 Xid、只有 NCCL/应用栈报错 → 按应用方向排查（如 rank 间不同步、死循环 kernel）',
+      '**不要用调大超时来掩盖它**',
+    ],
+    source: 'https://www.netdata.cloud/guides/nvidia-gpu/nvidia-gpu-xid-errors',
+  },
+  {
+    id: 'smi_itself_hangs',
+    label: 'nvidia-smi 命令本身卡住',
+    class_hint: 'hardware',
+    patterns: [/nvidia-smi.*(?:hang|freeze|stuck|timed out)/i, /执行\s*nvidia-smi\s*超时/i],
+    root_cause:
+      '连查询工具都无法完成 IOCTL。**这比「报错退出」更严重**——说明 GPU 已不能正常响应驱动，' +
+      '通常指向设备挂死而非上层软件问题。',
+    check: ['用 timeout 5 nvidia-smi 确认确实无响应而非慢', '查 dmesg 有无 Xid 62 / 79', '检查进程是否处于 D 状态'],
+    typical_fix: [
+      '尝试单卡复位 nvidia-smi --gpu-reset -i N（需先释放占用）',
+      '复位失败则隔离该卡并走硬件流程',
+    ],
+    source: 'https://help.aliyun.com/zh/ack/ack-managed-and-ack-dedicated/user-guide/use-node-diagnosis-to-self-troubleshoot-gpu-node-problems',
+  },
+  {
+    id: 'gpu_reset_failed',
+    label: 'GPU 复位失败',
+    class_hint: 'hardware',
+    patterns: [
+      /Unable to reset the GPU/i,
+      /In use by another client/i,
+      /GPU reset.*(?:failed|not supported)/i,
+    ],
+    root_cause:
+      '复位失败可能是「有进程仍占用设备」（可解决），也可能是「复位本身不成功」——' +
+      '后者说明挂死已经超出软件恢复能力。',
+    check: ['先确认是否还有进程占用该卡（nvidia-smi 或 lsof /dev/nvidia*）', '查复位后的 Xid 是否继续出现'],
+    typical_fix: ['先释放占用再复位；仍失败则隔离节点走硬件流程'],
+    source: 'https://help.aliyun.com/zh/ack/ack-managed-and-ack-dedicated/user-guide/use-node-diagnosis-to-self-troubleshoot-gpu-node-problems',
+  },
+  {
+    id: 'process_d_state',
+    label: '进程处于 D 状态且无法终止',
+    class_hint: 'hardware',
+    patterns: [
+      /\bD\s+state\b/i,
+      /\bD</i,
+      /uninterruptible sleep/i,
+    ],
+    root_cause:
+      '进程进入不可中断睡眠，说明它正阻塞在一次无法返回的内核操作上（通常是显卡驱动或存储 IO）。' +
+      '**`kill -9` 对它无效是典型特征**——阻塞在内核态，信号无法投递。',
+    check: [
+      'ps -eo pid,ppid,stat,wchan,etime,args | awk \'$4~/^D/\' 找 D 状态进程',
+      'cat /proc/PID/stack 看内核栈，确认阻塞在哪个驱动上',
+      '查同节点 Xid 事件',
+    ],
+    typical_fix: [
+      '阻塞在 nvidia 驱动 → 按 GPU 挂死方向处理，必要时重启节点',
+      '阻塞在存储 → 属另一类问题（元数据/后端拥塞），不要误判为 GPU 故障',
+    ],
+    source: 'https://www.netdata.cloud/guides/nvidia-gpu/nvidia-gpu-couldnt-communicate-with-driver',
   },
 ];
 
