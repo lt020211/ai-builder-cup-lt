@@ -1,9 +1,27 @@
 # 部署前置条件清单
 
 > 适用对象：本项目（Python / Flask + 自建 GitHub 仓库）
-> 最后更新：2026-10-13
+> 最后更新：**2026-10-14**（本版根据官方文档核实，纠正了上一版对 Starter Tier 的判断）
 
-## 路径 A：标准 Google Cloud 项目（推荐，最灵活）
+## ✅ 结论先行：本项目**必须**使用标准项目 + 启用结算（Billing）
+
+上一版把「Starter Tier 零账单」列为可用路径 B，并标注「未确认能否部署自带 Dockerfile」。
+**现已用一手文档核实，答案是：不能。因此 Starter Tier 对本项目不可用。**
+
+| 此前的疑问 | 核实结论 | 依据 |
+|---|---|---|
+| Starter Tier 能否部署自带 Dockerfile / 已有仓库？ | **不能** | 官方：Starter Tier 的发布流程是「Open Google AI Studio **Build Mode** → 用提示词描述应用 → agent 生成 React 前端 + Node 后端 → 点 Publish」。官方原文明写 *"No Dockerfile, no gcloud CLI, no YAML configuration files."* |
+| 标准项目下 Cloud Run 是否强制要求启用结算？ | **强制要求** | Cloud Run 官方 Python 快速入门「准备工作」原文：*"Verify that billing is enabled for your Google Cloud project."* |
+
+**推论**：本项目是 Python / Flask 服务端应用，仓库里有自己的 `Dockerfile` 与测试。
+走 Starter Tier 就必须放弃这个仓库、改由 AI Studio 的 agent 重新生成一套 React + Node 代码——
+那等于把已完成的 54 项测试、碳强度模型与工具调用循环全部作废。**因此路径 A 是唯一可行路径。**
+
+> Starter Tier 的额外资格陷阱（供参考，本项目已不适用）：一旦账号曾经拥有过付费 Cloud Billing 账号即**永久**失去资格；
+> 且官方明确 *"We don't have enough evidence from your account activity to grant Starter Tier access at this time"*——
+> 全新账号也可能不符合条件，且支持团队无法覆盖该判断。
+
+## 路径 A：标准 Google Cloud 项目（**唯一可行路径**）
 
 ### A1. 账号与项目
 
@@ -61,20 +79,18 @@ gcloud artifacts repositories create gpu-waste-auditor \
 
 免费额度按 `us-central1` 价格基准计算，但所选区域的单价按上表分层。
 
-## 路径 B：Starter Tier（零账单，但不是万用）
+## 路径 B：Starter Tier —— ❌ 对本项目不可用
 
-资格条件（**顺序不可逆**）：
+**已核实：不可用，不必尝试。** 详见文首的结论表。
 
-- [ ] 使用**个人 Gmail** 账号
-- [ ] **从未拥有过有效的付费 Cloud Billing 账号**（一旦拥有过即永久失去资格）
-- [ ] 不是 Google Workspace 账号（含付费 / 免费 / 教育 / 公益版）
-- [ ] 通过 **Google AI Studio Build 模式**点发布
+Starter Tier 的定位是「在 AI Studio Build 模式里从提示词生成应用并直接发布」，
+它不提供「部署任意容器镜像」的能力。本项目有自己的 `Dockerfile`、`requirements.txt`、
+测试套件与 GitHub 仓库，与之不兼容。
 
-已知限制：每账号最多 **2 个应用**、**单一区域锁定**、API 面锁死（禁用 BigQuery / Pub/Sub / Cloud Functions）、临时文件系统、适用独立的 Starter Tier 附加条款。
+已知限制（供理解，本项目不适用）：每账号最多 **2 个应用**、**单一区域锁定**、
+API 面锁死（禁用 BigQuery / Pub/Sub / Cloud Functions）、临时文件系统、适用独立的 Starter Tier 附加条款。
 
-⚠️ **未确认**：能否部署自带 Dockerfile 或已有仓库。官方文档只描述了「AI Studio 生成应用」这一条路径。
-
-## 路径 C：Firebase
+## 路径 C：Firebase —— ❌ 对本项目无免绑卡优势
 
 | 组件 | Spark（免费 · 不绑卡） | Blaze（按量 · 需绑卡） |
 |---|---|---|
@@ -82,7 +98,13 @@ gcloud artifacts repositories create gpu-waste-auditor \
 | Cloud Functions | ❌ 不可用 | ✅ 200 万次调用 / 月免费 |
 | **本项目可用性** | ❌ 服务端 Python **跑不了** | ✅ 可用，但等于回到绑卡路径 |
 
-**结论**：本项目是 Python 服务端应用，Firebase Hosting 免费版只能托管静态文件，跑不了。要走 Firebase 就必须升级 Blaze 并绑卡——**没有绕开绑卡的优势**。
+**结论**：本项目是 Python 服务端应用，Firebase Hosting 免费版只能托管静态文件，跑不了。
+要走 Firebase 就必须升级 Blaze 并绑卡——**没有绕开绑卡的优势**。
+
+> 附注（一个已被排除的替代方案）：理论上可以把整套计算逻辑改写为浏览器端 JS、
+> 连同「用户自带 Gemini Key」的调用方式一起做成纯静态站点，托管在 Firebase Hosting Spark 上，
+> 从而完全绕开绑卡。但代价是要丢弃已测试的 Python 代码库、重写全部逻辑，
+> 且在 5 天窗口内引入大量新风险。**不推荐，仅作为兜底记录。**
 
 ## 成本预期
 
@@ -100,13 +122,40 @@ Cloud Run 免费额度（按请求计费型，按结算账号汇总、每月重�
 
 ⚠️ Cloud Run 定价**不含** Cloud Build 与 Artifact Registry 的费用，两者各有独立免费额度。
 
-## 尚未确认的两点（部署前请实测）
+## 尚未确认的点（部署前请实测）
 
-1. **标准项目下 Cloud Run 是否强制要求启用 Billing**：通用规则如此，但本次抓取的 Cloud Run 定价页未明文说明。已确认的事实是 Starter Tier 下 Cloud Run 可无账单运行。
-2. **Starter Tier 能否部署自带 Dockerfile / 已有仓库**：官方文档未提及，需实测。
+1. **能否用中国内地签发的双币/国际信用卡完成 Google Cloud 开通**：
+   Google 支持银联部分卡种与主流国际卡组织，但风控拒绝并不罕见。**这是当前唯一的外部阻塞点**，
+   本次无法在本地验证，必须由账号持有人实测。
+2. **项目所在区域是否受组织策略限制**：若使用 Google Workspace 账号，组织策略可能禁止
+   公开（`allUsers`）访问。个人 Gmail 账号无此问题。
 
-## 最短可行路径（建议执行顺序）
+## 最短可行路径
 
-1. 用个人 Gmail 试 AI Studio 能否发布 → 判断路径 B 是否可用（约 15 分钟）
-2. 同时准备双币信用卡试开通 Billing → 打通路径 A（约 10 分钟）
-3. 任一条打通后，按本文件 A1→A6 逐项勾选，执行 `README.md` 中的部署命令
+前置条件只有两项需要账号持有人操作，其余全部已脚本化：
+
+| # | 步骤 | 谁来做 | 预计耗时 | 位置 |
+|---|---|---|---|---|
+| 1 | 用 Google 账号登录并授权 CLI | 你（浏览器交互） | 2 分钟 | `gcloud auth login` |
+| 2 | 创建/选择项目，**开通结算（绑卡）** | 你（浏览器交互） | 5–10 分钟 | <https://console.cloud.google.com/billing> |
+| 3 | 拿到 Gemini API Key | 你 | 2 分钟 | <https://aistudio.google.com/apikey> |
+| 4 | 存密钥、启用 API、构建、部署、验证 | **一条命令** | 约 5 分钟 | `./deploy/deploy.sh <PROJECT_ID>` |
+
+第 4 步的脚本 `deploy/deploy.sh` 是幂等的：前置检查（登录 / 项目 / 结算）→ 启用 API →
+确保 Artifact Registry 仓库 → 挂载密钥 → 云端构建部署 → 部署后自动 curl 验证。
+**不需要本地 Docker**（走 Cloud Build 构建）。任一步失败都会给出明确的下一步提示。
+
+```bash
+# 1) 登录（会打开浏览器）
+export PATH="$HOME/google-cloud-sdk/bin:$PATH"
+gcloud auth login
+
+# 2) 开通结算后，记下 Project ID，然后：
+cd ai-builder-cup-lt
+printf '%s' '你的Gemini密钥' | gcloud secrets create gemini-api-key \
+  --data-file=- --replication-policy=automatic        # 需先设好默认项目
+./deploy/deploy.sh <PROJECT_ID>
+```
+
+> 若先跳过密钥直接部署，页面仍可运行，但「AI 工具调用轨迹」会显示"离线模式未调用工具"——
+> 这会丢掉本项目最主要的差异化展示。**建议先配密钥再部署**，或配好后重跑脚本覆盖。

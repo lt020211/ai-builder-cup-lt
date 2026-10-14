@@ -58,7 +58,25 @@ export GEMINI_API_KEY="你的密钥"
 
 ## 部署到 Cloud Run
 
-> 部署前置条件（账号、需启用的 API、IAM 角色、区域选择、成本预期）逐项清单见 **[deploy/PREREQUISITES.md](deploy/PREREQUISITES.md)**。
+> ⚠️ **本项目必须使用标准 Cloud 项目并启用结算（Billing），没有零账单的绕行路径。**
+> 官方 Cloud Run 快速入门明确要求项目已启用结算；而「Cloud Starter Tier 免绑卡」仅适用于
+> 在 Google AI Studio **Build 模式**里由 agent 生成的应用（React + Node），**不支持部署自带 Dockerfile 的仓库**。
+> 核实过程与依据见 **[deploy/PREREQUISITES.md](deploy/PREREQUISITES.md)**。
+
+### 方式一：一条命令（推荐）
+
+```bash
+gcloud auth login                      # 浏览器交互
+./deploy/deploy.sh <PROJECT_ID>        # 幂等：检查 → 启用 API → 建仓库 → 部署 → 验证
+```
+
+脚本会依次做前置检查（登录 / 项目 / 结算）、启用所需 API、确保 Artifact Registry 仓库存在、
+挂载 Gemini 密钥、在云端构建并部署、最后自动 curl 验证。**不需要本地 Docker**。
+
+> 未配置密钥也能部署，但页面上的「AI 工具调用轨迹」会显示"离线模式未调用工具"——
+> 这会丢掉本项目最主要的差异化展示。建议先配密钥（见 `deploy/PREREQUISITES.md` 第 3 步）。
+
+### 方式二：手动分步
 
 ```bash
 PROJECT_ID=你的项目ID
@@ -182,8 +200,9 @@ curl -s -X POST http://127.0.0.1:8080/api/analyze \
 │   └── test_ai.py                AI 层与离线降级测试
 ├── scripts/run_local.sh          本地一键启动
 ├── deploy/
+│   ├── deploy.sh                 部署到 Cloud Run 的一键幂等脚本
 │   ├── PREREQUISITES.md          部署前置条件清单
-│   └── service.yaml              Cloud Run 服务定义
+│   └── service.yaml              Cloud Run 服务定义（声明式替代方案）
 └── docs/
     ├── architecture.md           架构与完整计算口径
     ├── architecture.en.md        Architecture and calculation basis (English)
