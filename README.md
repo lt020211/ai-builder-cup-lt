@@ -3,6 +3,8 @@
 > Google Cloud AI Builder Cup 2026（JAPAC）参赛项目
 > 参赛者：lt020211 ｜ 作品名：AI Builder Cup-lt
 
+**语言：** [🇬🇧 English](README.en.md) ｜ 🇨🇳 中文
+
 ## 一句话方案
 
 **把多云 GPU 集群「预留了卡却没在用」的隐性浪费，算成电费与碳排，再让 Gemini 自主调用工具取数、给出可排期可决策的优化动作——并回答「什么时候跑最省碳」。**
@@ -158,7 +160,8 @@ curl -s -X POST http://127.0.0.1:8080/api/analyze \
 
 ```
 .
-├── README.md
+├── README.md                     中文版说明（本文件）
+├── README.en.md                  English README
 ├── LICENSE
 ├── Dockerfile                    Cloud Run 构建入口
 ├── requirements.txt
@@ -183,7 +186,9 @@ curl -s -X POST http://127.0.0.1:8080/api/analyze \
 │   └── service.yaml              Cloud Run 服务定义
 └── docs/
     ├── architecture.md           架构与完整计算口径
-    └── demo-script.md            3 分钟演示视频分镜
+    ├── architecture.en.md        Architecture and calculation basis (English)
+    ├── demo-script.md            3 分钟演示视频分镜
+    └── demo-script.en.md         Demo video storyboard (English)
 ```
 
 ## 提交物清单
@@ -193,6 +198,7 @@ curl -s -X POST http://127.0.0.1:8080/api/analyze \
 - [ ] 演示视频（**少于 3 分钟**）— 分镜见 [docs/demo-script.md](docs/demo-script.md)
 - [ ] 方案说明 deck
 - [x] 代码为赛期内新做
+- [x] 英文版文档（[README.en.md](README.en.md)、[architecture.en.md](docs/architecture.en.md)、[demo-script.en.md](docs/demo-script.en.md)）——面向 JAPAC 国际评审
 
 ## 已知限制与不确定项
 

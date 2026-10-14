@@ -1,0 +1,215 @@
+# GPU Compute Waste Auditor
+
+> Google Cloud AI Builder Cup 2026 (JAPAC) — competition entry
+> Entrant: lt020211 ｜ Project: AI Builder Cup-lt
+
+**Language:** 🇬🇧 English ｜ [🇨🇳 中文](README.md)
+
+## One-line pitch
+
+**We turn the hidden waste of "reserved but idle" GPUs across multi-cloud clusters into electricity cost and carbon emissions — then let Gemini call tools to fetch its own data and produce schedulable, actionable decisions, including the answer to *when* to run for the lowest carbon.**
+
+> Upgraded from an *after-the-fact audit report* to a **carbon-aware scheduling decision engine**: the AI no longer merely explains numbers — it **fetches data through tools first, then reasons** — and every recommendation can be **accepted or rejected** in the UI. The interaction ends in a decision, not in reading.
+
+## How it maps to the theme
+
+| Item | Detail |
+|---|---|
+| Theme / track | Sustainability & Social Impact |
+| Target users | Ops and platform teams running multi-cloud GPU clusters; compute budget owners |
+| Core pain point | Conventional monitoring reports *what the utilisation is*, but never *what the waste costs, which item to fix first, and how much fixing it saves* |
+| Our approach | A deterministic compute layer derives wasted GPU-hours / cost / energy / carbon → the AI calls functions to fetch its own data and produces root-cause analysis plus decision-ready actions |
+| Why AI is required | Waste-pattern classification and root-cause inference depend on cross-node, cross-GPU-model context. Translating audit output into a schedulable action list requires natural-language explanation — a rule engine can produce the numbers but not the *why* or the *what first* |
+
+### Two differentiating design choices
+
+**1. The AI is a tool caller, not a text generator.** The model must call `query_metrics` for data and `simulate_defer` for carbon math before it is allowed to conclude anything. Every number originates from deterministic code, so the model cannot invent one — this maps directly onto the 40% "Technical Merit & Gen AI Implementation" criterion.
+
+**2. An hourly grid carbon-intensity curve (carbon-aware scheduling).** The same kilowatt-hour carries a different carbon footprint depending on when it is consumed: it is lowest (0.82×) at the midday solar peak and highest (1.10×) during the evening fossil-fuelled ramp. This means **identical energy use and an identical electricity bill, with roughly 25% less carbon, purely by moving the workload to a different hour** — a physically grounded, quantifiable optimisation dimension that is rare in the sustainability track.
+
+## Quick start (local)
+
+```bash
+# One command: create venv → install deps → run tests → start the server
+chmod +x scripts/run_local.sh && ./scripts/run_local.sh
+```
+
+Then open <http://127.0.0.1:8080> and click "Load sample data and analyse".
+
+Or step by step:
+
+```bash
+python3 -m venv .venv && source .venv/bin/activate
+pip install -r requirements.txt
+python -m unittest discover -s tests -v      # run tests
+python -m src.app                            # start the server
+```
+
+**The full demo works with no credentials at all**: the AI diagnosis degrades gracefully to an offline rule template. To enable real model diagnosis:
+
+```bash
+cp .env.example .env      # then fill in GEMINI_API_KEY
+export GEMINI_API_KEY="your-key"
+```
+
+## Deploy to Cloud Run
+
+> A complete prerequisites checklist (accounts, APIs to enable, IAM roles, region choice, expected cost) is in **[deploy/PREREQUISITES.md](deploy/PREREQUISITES.md)**.
+
+```bash
+PROJECT_ID=your-project-id
+REGION=asia-east1
+REPO=gpu-waste-auditor
+
+# 1. Build and push the image
+gcloud artifacts repositories create $REPO --repository-format=docker --location=$REGION
+gcloud builds submit --tag $REGION-docker.pkg.dev/$PROJECT_ID/$REPO/gpu-waste-auditor:latest
+
+# 2. Store the API key in Secret Manager
+echo -n "your-gemini-key" | gcloud secrets create gemini-api-key --data-file=-
+
+# 3. Deploy
+#    First replace the PROJECT_ID and REPO placeholders in deploy/service.yaml
+gcloud run services replace deploy/service.yaml --region=$REGION
+```
+
+## How it works
+
+```
+monitoring data → analyzer.py (deterministic compute) → structured audit result
+                                                              ↓
+                                          ai.py (Gemini tool-calling loop)
+                                            ↕  query_metrics / estimate_carbon
+                                            ↕  simulate_defer / propose_action
+                                                              ↓
+                                    Flask Web (Cloud Run) → metric cards + carbon curve
+                                                            + tool trace + decision list
+```
+
+**Design trade-off**: every number is derived by deterministic code; the AI only *fetches data, reasons, and registers recommendations*. This makes the numbers reproducible and auditable — the AI can never "make up a figure" — and it also means the system can still be demonstrated in full without an API key.
+
+**The AI tool-calling loop** (`ai.py::_agentic_diagnose`):
+
+```
+model → returns functionCall → execute tool locally → feed the result back → model → … → final text
+```
+
+Up to 8 turns (`MAX_TOOL_TURNS`); the loop ends as soon as the model emits text. The four tools:
+
+| Tool | Purpose |
+|---|---|
+| `query_metrics` | Fetch node-level detail sorted by cloud / pattern / cost — the only source of numbers the model can cite |
+| `estimate_carbon` | Given energy and an hour, return carbon emissions and the day's best hour |
+| `simulate_defer` | Shift a node's load from its current hour to a low-carbon hour and measure the reduction |
+| `propose_action` | Register one actionable recommendation; the UI renders "accept / reject" from it |
+
+**Core formulas** (full assumptions in [docs/architecture.md](docs/architecture.md)):
+
+```
+wasted GPU-hours = max(requested_cards − used_cards, 0) × hours
+                 + used_cards × hours × (1 − avg_utilisation)   [only when utilisation < 30%]
+wasted energy    = wasted GPU-hours × per-card TDP × 0.25
+wasted cost      = wasted energy × ¥0.70/kWh
+wasted carbon    = wasted energy × 0.581 kgCO₂e/kWh × hourly factor × region factor
+```
+
+## API
+
+| Method | Path | Description |
+|---|---|---|
+| GET | `/` | Web UI |
+| GET | `/healthz` | Health check, returns `{"status":"ok"}` |
+| GET | `/api/sample` | Returns the anonymised sample dataset |
+| GET | `/api/carbon-profile` | 24-point hourly grid carbon-intensity curve plus best/worst hour |
+| POST | `/api/analyze` | Body `{"records":[...], "window":"..."}`; falls back to sample data if `records` is omitted. Returns summary, detail, carbon curve and AI decisions |
+
+AI-related fields in the `/api/analyze` response (values below are the **actual** output of the sample dataset):
+
+```json
+{
+  "ai": {
+    "mode": "gemini | offline | fallback",
+    "model": "gemini-2.5-flash",
+    "text": "diagnosis text produced by the model",
+    "tool_calls": [{"name": "query_metrics", "args": {}}],
+    "actions": [{
+      "id": "A1",
+      "title": "空转节点自动回收",
+      "detail": "对利用率持续低于 5% 的节点加 TTL，到期自动释放回资源池。",
+      "expected_cost_recovery_cny": 68307.0,
+      "expected_carbon_reduction_kg": 266.9,
+      "effort": "中"
+    }]
+  },
+  "carbon_profile": {"hourly_factor": [24 relative factors], "best_hour": 13, "worst_hour": 19},
+  "carbon_peak": {"best_hour": 13, "worst_hour": 19}
+}
+```
+
+> **Note on localisation**: the web UI, prompt template and generated action text are currently in
+> Simplified Chinese, and the API returns them verbatim. Field *names* are English throughout, and
+> `effort` takes the values `低 / 中 / 高` (low / medium / high). An English UI is a documented
+> follow-up, not something this README claims to have already done.
+
+Example request:
+
+```bash
+curl -s -X POST http://127.0.0.1:8080/api/analyze \
+  -H 'Content-Type: application/json' -d '{}' | python3 -m json.tool
+```
+
+## Repository layout
+
+```
+.
+├── README.md                     Chinese README
+├── README.en.md                  This file
+├── LICENSE
+├── Dockerfile                    Cloud Run build entry point
+├── requirements.txt
+├── .env.example                  Environment template (.env is never committed)
+├── src/
+│   ├── app.py                    Flask entry point and API
+│   ├── analyzer.py               Waste detection and conversion (pure compute, unit-testable)
+│   ├── carbon.py                 Hourly grid carbon-intensity model (basis for carbon-aware scheduling)
+│   ├── tools.py                  The four AI-callable tools + per-session tool state
+│   ├── ai.py                     Gemini tool-calling loop with offline fallback
+│   ├── prompts/diagnose.md       Diagnosis prompt template
+│   └── templates/index.html      Web UI (metric cards / carbon curve / tool trace / decision list)
+├── data/sample_metrics.json      Anonymised sample data
+├── tests/
+│   ├── test_analyzer.py          Compute-layer tests
+│   ├── test_carbon.py            Carbon-intensity model tests
+│   ├── test_tools.py             Tool and dispatcher tests
+│   └── test_ai.py                AI layer and offline-fallback tests
+├── scripts/run_local.sh          One-command local launcher
+├── deploy/
+│   ├── PREREQUISITES.md          Deployment prerequisites checklist
+│   └── service.yaml              Cloud Run service definition
+└── docs/
+    ├── architecture.md           Architecture and full calculation basis
+    └── demo-script.md            3-minute demo video storyboard
+```
+
+## Submission checklist
+
+- [x] **Public** GitHub repository (this repo)
+- [ ] Accessible deployed prototype link (Cloud Run)
+- [ ] Demo video (**under 3 minutes**) — storyboard in [docs/demo-script.md](docs/demo-script.md)
+- [ ] Solution deck
+- [x] Code written during the competition period
+
+## Known limitations and uncertainties
+
+1. **Energy figures are approximations**: idle power is estimated as `TDP × 0.25` rather than measured. It can be replaced with a measured curve once DCGM/IPMI power readings are ingested.
+2. **Utilisation is averaged over the period**, which masks distributions such as "fully loaded for the first 80% of the window, idle for the last 20%".
+3. **No per-job attribution**: we know which node wastes resources, not which job caused it.
+4. **Electricity price remains a constant**: real bills are tiered. Carbon is now differentiated **by hour** (24-point relative curve) and supports **regional** factors; however, both the curve and the regional factors are **simplified approximations derived from public sources, not measured data**, and must be replaced with a real intensity feed such as Electricity Maps before being used as a scheduling basis.
+5. **Carbon-aware scheduling assumes deferrable load**: for training jobs, only tasks with checkpoint-and-resume capability can genuinely be postponed. We list "deferrability" as missing data rather than assuming every job can be shifted.
+6. GPU-hour unit prices are estimates and need calibrating against actual procurement/leasing records.
+
+These limitations will be raised during technical review; this document lists them as known boundaries rather than avoiding them.
+
+## Licence
+
+[MIT](LICENSE)
