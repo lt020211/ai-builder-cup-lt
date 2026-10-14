@@ -66,10 +66,24 @@ def build_prompt(
             "你是资深 AI 基础设施能效专家。\n## 汇总\n{summary_json}\n"
             "## 明细\n{findings_json}\n## 全量\n{records_json}\n"
         )
+
+    # 电耗最大的节点：提示词里要它对这个节点调 simulate_defer。
+    # 为什么写死：实测发现只说「挑电耗最大的节点」，模型会改用 estimate_carbon 自己算，
+    # 「碳感知调度」这条建议就丢了。节点名与最优小时都由确定性代码给出，不涉及编造。
+    heaviest = (
+        max(findings, key=lambda f: f.get("workload_energy_kwh", 0.0)) if findings else None
+    )
+
     return (
         template.replace("{summary_json}", json.dumps(summary, ensure_ascii=False, indent=2))
         .replace("{findings_json}", json.dumps(findings, ensure_ascii=False, indent=2))
         .replace("{records_json}", json.dumps(records or [], ensure_ascii=False, indent=2))
+        .replace("{heaviest_node}", heaviest["node"] if heaviest else "（无，找不到有效节点）")
+        .replace(
+            "{heaviest_energy}",
+            str(round(heaviest.get("workload_energy_kwh", 0.0))) if heaviest else "0",
+        )
+        .replace("{best_hour}", str(carbon.best_hour()))
     )
 
 

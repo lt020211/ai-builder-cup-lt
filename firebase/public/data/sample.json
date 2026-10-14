@@ -1,0 +1,29 @@
+{
+  "meta": {
+    "source": "示例数据（已脱敏，云与节点名均为虚构）",
+    "window": "2026-10-06 ~ 2026-10-12",
+    "fields": {
+      "cloud": "云厂商标识",
+      "node": "节点标识",
+      "gpu_type": "卡型",
+      "requested_cards": "预留/申请卡数",
+      "used_cards": "实际承载任务的卡数",
+      "hours": "统计周期小时数",
+      "avg_util_pct": "周期内平均 GPU 算力利用率（%）",
+      "start_hour": "负载主要运行时段（0-23，用于碳强度时段测算）"
+    },
+    "note": "真实接入时，这些字段可直接由监控平台导出；单位与口径见 docs/architecture.md"
+  },
+  "records": [
+    {"cloud": "cloud-a", "node": "node-a01", "gpu_type": "H800", "requested_cards": 8, "used_cards": 4, "hours": 168, "avg_util_pct": 62.0, "start_hour": 19},
+    {"cloud": "cloud-a", "node": "node-a02", "gpu_type": "H800", "requested_cards": 8, "used_cards": 8, "hours": 168, "avg_util_pct": 3.5, "start_hour": 20},
+    {"cloud": "cloud-a", "node": "node-a03", "gpu_type": "H100", "requested_cards": 8, "used_cards": 8, "hours": 168, "avg_util_pct": 1.2, "start_hour": 18},
+    {"cloud": "cloud-b", "node": "node-b01", "gpu_type": "A100", "requested_cards": 4, "used_cards": 4, "hours": 120, "avg_util_pct": 12.0, "start_hour": 19},
+    {"cloud": "cloud-b", "node": "node-b02", "gpu_type": "A100", "requested_cards": 4, "used_cards": 2, "hours": 72, "avg_util_pct": 78.0, "start_hour": 14},
+    {"cloud": "cloud-b", "node": "node-b03", "gpu_type": "H800", "requested_cards": 8, "used_cards": 8, "hours": 336, "avg_util_pct": 88.0, "start_hour": 9},
+    {"cloud": "cloud-c", "node": "node-c01", "gpu_type": "H20", "requested_cards": 8, "used_cards": 8, "hours": 168, "avg_util_pct": 45.0, "start_hour": 21},
+    {"cloud": "cloud-c", "node": "node-c02", "gpu_type": "H20", "requested_cards": 8, "used_cards": 6, "hours": 168, "avg_util_pct": 22.0, "start_hour": 19},
+    {"cloud": "cloud-d", "node": "node-d01", "gpu_type": "V100", "requested_cards": 4, "used_cards": 4, "hours": 240, "avg_util_pct": 8.0, "start_hour": 19},
+    {"cloud": "cloud-d", "node": "node-d02", "gpu_type": "V100", "requested_cards": 2, "used_cards": 2, "hours": 96, "avg_util_pct": 55.0, "start_hour": 10}
+  ]
+}

@@ -1,34 +1,84 @@
 <!DOCTYPE html>
 <html lang="zh-CN">
 <head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>GPU Waste Auditor — 部署链路验证中</title>
-  <style>
-    :root { color-scheme: dark; }
-    body {
-      margin: 0; min-height: 100vh; display: grid; place-items: center;
-      background: #0b0f19; color: #e8ecf5;
-      font: 15px/1.7 -apple-system, "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
-    }
-    .card {
-      max-width: 560px; padding: 40px 44px; border-radius: 16px;
-      background: #131a29; border: 1px solid #24304a;
-    }
-    h1 { margin: 0 0 6px; font-size: 21px; letter-spacing: .3px; }
-    p  { margin: 10px 0; color: #9aa8c0; }
-    code { background: #1c2437; padding: 2px 6px; border-radius: 5px; color: #8fd6a8; }
-    .tag { display:inline-block; margin-bottom:14px; padding:3px 10px; border-radius:999px;
-           background:#1d3a2a; color:#7ee2a8; font-size:12px; }
-  </style>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>GPU 算力浪费审计器 · AI Builder Cup 2026</title>
+<meta name="description" content="把多云 GPU 集群的「预留」与「实际用量」差异，变成可执行的能效与碳排决策。Gemini 自主调用工具取数，而非凭空生成结论。">
+<link rel="stylesheet" href="./styles.css">
 </head>
 <body>
-  <div class="card">
-    <span class="tag">Firebase Hosting 部署链路已打通</span>
-    <h1>GPU Waste Auditor</h1>
-    <p>本页是<strong>占位页</strong>，用于验证 Firebase Hosting 的发布链路（创建 version → 上传 → 发布）。</p>
-    <p>正式版本会是一个纯前端应用：浏览器端运行算力浪费分析、碳强度时段模型与 Gemini 工具调用循环，
-       模型调用经 <code>Firebase AI Logic</code> 转发。</p>
+<div class="wrap">
+  <h1>GPU 算力浪费审计器</h1>
+  <div class="sub">
+    把集群的「预留」与「实际用量」差异，变成可执行的能效与碳排决策
+    &nbsp;|&nbsp; Google Cloud AI Builder Cup 2026
   </div>
+
+  <div class="bar">
+    <button id="run">加载示例数据并分析</button>
+    <span class="hint" id="status">点击开始</span>
+  </div>
+
+  <div id="result" style="display:none">
+    <div class="cards" id="cards"></div>
+
+    <section>
+      <h2>电网碳强度时段曲线 <span class="hint" id="curvehint"></span></h2>
+      <div class="curve" id="curve"></div>
+      <div class="axis" id="curveaxis"></div>
+      <div class="hint" style="margin-top:8px">
+        绿柱 = 全天碳强度最低时段，红柱 = 最高时段。同样电耗挪到绿柱时段，碳排更低，电费不变。
+      </div>
+    </section>
+
+    <section>
+      <h2>AI 诊断 <span class="hint" id="aimode"></span></h2>
+      <div class="hint" id="degradereason" style="display:none;margin-bottom:12px"></div>
+      <pre class="ai" id="aitext"></pre>
+    </section>
+
+    <section>
+      <h2>AI 的工具调用轨迹 <span class="hint" id="toolcount"></span></h2>
+      <ul class="tools" id="tools"></ul>
+      <div class="hint" style="margin-top:8px">
+        所有数字都由这些工具从确定性代码中取出，模型无法凭空生成。
+      </div>
+    </section>
+
+    <section>
+      <h2>决策清单 <span class="hint">点「接受」即计入预计收益</span></h2>
+      <div id="actions"></div>
+      <div class="summary" id="decisionsummary"></div>
+    </section>
+
+    <section>
+      <h2>浪费明细（按金额降序）</h2>
+      <div style="overflow-x:auto"><table id="tbl"></table></div>
+    </section>
+  </div>
+
+  <section>
+    <h2>口径说明</h2>
+    <div class="hint">
+      浪费卡时 = 申请未用卡时 + 低效折算卡时（利用率低于 30% 时按
+      <code>使用卡数 × 时长 × (1 − 利用率)</code> 折算）；
+      电耗按 单卡 TDP × 0.25（空转功率系数）折算；电费 ¥0.70/kWh；
+      碳排因子 0.581 kgCO₂e/kWh（全国电网平均）；时段曲线为简化近似，非实测数据。
+      完整假设见仓库 <code>docs/architecture.md</code>。
+    </div>
+  </section>
+
+  <section>
+    <h2>运行方式</h2>
+    <div class="hint">
+      本页面是**纯静态站点**，托管于 Firebase Hosting，没有后端服务：审计计算在浏览器内完成，
+      Gemini 通过 <b>Firebase AI Logic</b> 直连调用（模型自主决定调用哪些工具）。
+      即使模型不可用，页面也会自动降级为离线规则模板，功能完整可演示。
+    </div>
+  </section>
+</div>
+
+<script type="module" src="./js/app.js"></script>
 </body>
 </html>

@@ -31,6 +31,18 @@ DEFAULT_SITE = "gpu-waste-auditor-2026"
 API = "https://firebasehosting.googleapis.com/v1beta1"
 GCLOUD = str(Path.home() / "google-cloud-sdk" / "bin" / "gcloud")
 
+# Hosting 默认给静态资源发 max-age=3600。对演示型应用这是坑：
+# 重新发布后浏览器仍用缓存里的旧 JS，改了代码却「看起来没生效」，
+# 白白花时间怀疑逻辑。所以这里显式改成 no-cache（仍走 ETag，命中时是 304）。
+#
+# 顺序有讲究：Hosting 是**后匹配的规则生效**，所以先用 `**` 兜底成全站 no-cache，
+# 再用 `vendor/**` 把有版本的 Firebase SDK 覆盖成长缓存。
+# 另外 `/` 这个根路径不会被 `**/*.html` 匹配到——踩过这个坑，所以用 `**` 兜底。
+DEFAULT_HEADERS = [
+    {"glob": "**", "headers": {"Cache-Control": "no-cache"}},
+    {"glob": "vendor/**", "headers": {"Cache-Control": "public, max-age=604800"}},
+]
+
 
 def access_token() -> str:
     """取 gcloud 当前的 access token。"""
@@ -139,7 +151,11 @@ def deploy(public_dir: Path, site: str, project: str) -> str:
     client = Client(project)
 
     print(f"[1/5] 创建 version（{len(files)} 个文件）")
-    version = client.request("POST", f"{API}/sites/{site}/versions", {"config": {}})
+    version = client.request(
+        "POST",
+        f"{API}/sites/{site}/versions",
+        {"config": {"headers": DEFAULT_HEADERS}},
+    )
     version_name = version["name"]
     version_id = version_name.rsplit("/", 1)[-1]
     print(f"      version = {version_id}")
