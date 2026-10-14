@@ -34,6 +34,18 @@ GPU_SPECS: Dict[str, Dict[str, float]] = {
 }
 DEFAULT_SPEC = {"tdp_w": 400.0, "price_per_card_hour_cny": 15.0}
 
+
+def active_power_ratio(util_pct: float) -> float:
+    """利用率到功耗占比的线性近似。
+
+    利用率 0% 时取空转功率系数（0.25），100% 时取满功耗（1.0），中间线性插值。
+    真实 GPU 功耗对利用率并非严格线性，此处为简化模型；因为是单调映射，
+    不改变「利用率越高越费电」的结论方向。
+    """
+    return IDLE_POWER_RATIO + (1.0 - IDLE_POWER_RATIO) * max(
+        min(util_pct, 100.0), 0.0
+    ) / 100.0
+
 PATTERN_LABELS = {
     "over_request": "超额申请",
     "idle": "长期空转",
@@ -78,6 +90,7 @@ def analyze_record(rec: Dict[str, Any]) -> Dict[str, Any]:
     used = max(_to_int(rec.get("used_cards")), 0)
     hours = max(_to_float(rec.get("hours")), 0.0)
     util = min(max(_to_float(rec.get("avg_util_pct")), 0.0), 100.0)
+    start_hour = _to_int(rec.get("start_hour"), 19) % 24
 
     unused_cards = max(requested - used, 0)
     unused_card_hours = unused_cards * hours
@@ -108,6 +121,9 @@ def analyze_record(rec: Dict[str, Any]) -> Dict[str, Any]:
         dominant = "efficient"
 
     energy_kwh = waste_card_hours * spec["tdp_w"] * IDLE_POWER_RATIO / 1000.0
+    workload_energy_kwh = (
+        used * hours * spec["tdp_w"] * active_power_ratio(util) / 1000.0
+    )
     cost_cny = waste_card_hours * spec["price_per_card_hour_cny"]
     carbon_kg = energy_kwh * CARBON_FACTOR_KG_PER_KWH
 
@@ -125,11 +141,13 @@ def analyze_record(rec: Dict[str, Any]) -> Dict[str, Any]:
         "used_cards": used,
         "hours": round(hours, 2),
         "avg_util_pct": round(util, 2),
+        "start_hour": start_hour,
         "unused_card_hours": round(unused_card_hours, 2),
         "low_eff_card_hours": round(low_eff_card_hours, 2),
         "waste_card_hours": round(waste_card_hours, 2),
         "waste_cost_cny": round(cost_cny, 2),
         "waste_energy_kwh": round(energy_kwh, 2),
+        "workload_energy_kwh": round(workload_energy_kwh, 2),
         "waste_carbon_kg": round(carbon_kg, 2),
         "efficiency_pct": round(efficiency, 2),
         "patterns": patterns,

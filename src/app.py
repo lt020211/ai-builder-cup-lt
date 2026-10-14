@@ -8,6 +8,7 @@ from pathlib import Path
 
 from flask import Flask, jsonify, render_template, request
 
+from src import carbon
 from src.ai import diagnose
 from src.analyzer import analyze_batch
 
@@ -37,6 +38,12 @@ def api_sample():
     return jsonify(load_sample())
 
 
+@app.get("/api/carbon-profile")
+def api_carbon_profile():
+    """全天电网碳强度曲线，供前端展示与调整调度时段参考。"""
+    return jsonify(carbon.profile_snapshot())
+
+
 @app.post("/api/analyze")
 def api_analyze():
     payload = request.get_json(silent=True) or {}
@@ -51,7 +58,12 @@ def api_analyze():
         return jsonify({"error": "records 必须是数组"}), 400
 
     result = analyze_batch(records, window=window)
-    result["ai"] = diagnose(result["summary"], result["findings"])
+    result["ai"] = diagnose(result["summary"], result["findings"], result["records"])
+    result["carbon_profile"] = carbon.profile_snapshot()
+    result["carbon_peak"] = {
+        "best_hour": carbon.best_hour(),
+        "worst_hour": carbon.worst_hour(),
+    }
     return jsonify(result)
 
 

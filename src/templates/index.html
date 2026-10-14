@@ -5,15 +5,18 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>GPU 算力浪费审计器</title>
 <style>
-:root{--bg:#f6f5f2;--card:#fff;--line:#e3e1da;--text:#2c2c2a;--muted:#6b6a65;--accent:#185fa5;--warn:#a32d2d;--mid:#854f0b}
+:root{--bg:#f6f5f2;--card:#fff;--line:#e3e1da;--text:#2c2c2a;--muted:#6b6a65;--accent:#185fa5;--warn:#a32d2d;--mid:#854f0b;--ok:#0f6e56}
 *{box-sizing:border-box}
 body{margin:0;background:var(--bg);color:var(--text);font:14px/1.6 -apple-system,"PingFang SC","Helvetica Neue",Arial,sans-serif}
-.wrap{max-width:1080px;margin:0 auto;padding:28px 20px 64px}
+.wrap{max-width:1100px;margin:0 auto;padding:28px 20px 64px}
 h1{font-size:20px;font-weight:500;margin:0 0 6px}
 .sub{color:var(--muted);font-size:13px;margin-bottom:22px}
 .bar{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:20px}
 button{font:inherit;padding:9px 18px;border:1px solid var(--accent);background:var(--accent);color:#fff;border-radius:8px;cursor:pointer}
 button:disabled{opacity:.5;cursor:default}
+button.mini{padding:4px 12px;font-size:12px;border-radius:6px}
+button.accept{background:var(--ok);border-color:var(--ok)}
+button.reject{background:#fff;color:var(--muted);border-color:var(--line)}
 .cards{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:18px}
 .card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px 16px}
 .card .k{color:var(--muted);font-size:12px;margin-bottom:6px}
@@ -22,6 +25,7 @@ button:disabled{opacity:.5;cursor:default}
 .warn{color:var(--warn)}
 section{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:18px 20px;margin-bottom:16px}
 section h2{font-size:15px;font-weight:500;margin:0 0 12px}
+.hint{color:var(--muted);font-size:12px}
 pre.ai{white-space:pre-wrap;font:13px/1.75 inherit;margin:0}
 table{width:100%;border-collapse:collapse;font-size:13px}
 th,td{text-align:left;padding:8px 10px;border-bottom:1px solid var(--line);white-space:nowrap}
@@ -30,14 +34,32 @@ td.num{text-align:right;font-variant-numeric:tabular-nums}
 .tag{display:inline-block;padding:1px 8px;border-radius:99px;font-size:11px;border:1px solid var(--line);color:var(--muted)}
 .tag.high{color:var(--warn);border-color:var(--warn)}
 .tag.medium{color:var(--mid);border-color:var(--mid)}
-.hint{color:var(--muted);font-size:12px}
+.curve{display:flex;align-items:flex-end;gap:3px;height:90px;margin:6px 0 4px}
+.curve i{flex:1;background:#b5d4f4;border-radius:2px 2px 0 0;display:block;position:relative}
+.curve i.best{background:#5dcaa5}
+.curve i.worst{background:#f09595}
+.axis{display:flex;gap:3px;font-size:11px;color:var(--muted)}
+.axis span{flex:1;text-align:center}
+.tools{margin:0;padding:0;list-style:none;font:12px/1.9 var(--font-mono,ui-monospace,Menlo,monospace)}
+.tools li{display:flex;gap:8px;align-items:baseline;border-bottom:1px dashed var(--line);padding:3px 0}
+.tools b{color:var(--accent);font-weight:500;white-space:nowrap}
+.tools span{color:var(--muted);word-break:break-all}
+.action{border:1px solid var(--line);border-radius:10px;padding:12px 14px;margin-bottom:10px}
+.action.done{border-color:var(--ok);background:#f4fbf8}
+.action.denied{border-color:var(--line);background:#fafaf8;opacity:.7}
+.action .t{font-weight:500;margin-bottom:4px}
+.action .d{color:var(--muted);font-size:13px;margin-bottom:8px}
+.action .m{font-size:12px;color:var(--muted);margin-bottom:10px}
+.action .m b{color:var(--warn);font-weight:500}
+.action .m i{color:var(--ok);font-style:normal;font-weight:500}
+.summary{display:flex;gap:24px;flex-wrap:wrap;font-size:13px;padding:10px 0 2px;border-top:1px solid var(--line);margin-top:4px}
 @media(max-width:760px){.cards{grid-template-columns:repeat(2,1fr)}}
 </style>
 </head>
 <body>
 <div class="wrap">
   <h1>GPU 算力浪费审计器</h1>
-  <div class="sub">把集群的「预留」与「实际用量」差异，变成可执行的能效优化动作 &nbsp;|&nbsp; Google Cloud AI Builder Cup 2026</div>
+  <div class="sub">把集群的「预留」与「实际用量」差异，变成可执行的能效与碳排决策 &nbsp;|&nbsp; Google Cloud AI Builder Cup 2026</div>
   <div class="bar">
     <button id="run">加载示例数据并分析</button>
     <span class="hint" id="status">点击开始</span>
@@ -45,10 +67,31 @@ td.num{text-align:right;font-variant-numeric:tabular-nums}
 
   <div id="result" style="display:none">
     <div class="cards" id="cards"></div>
+
+    <section>
+      <h2>电网碳强度时段曲线 <span class="hint" id="curvehint"></span></h2>
+      <div class="curve" id="curve"></div>
+      <div class="axis" id="curveaxis"></div>
+      <div class="hint" style="margin-top:8px">绿柱 = 全天碳强度最低时段，红柱 = 最高时段。同样电耗挪到绿柱时段，碳排更低，电费不变。</div>
+    </section>
+
     <section>
       <h2>AI 诊断 <span class="hint" id="aimode"></span></h2>
       <pre class="ai" id="aitext"></pre>
     </section>
+
+    <section>
+      <h2>AI 的工具调用轨迹 <span class="hint" id="toolcount"></span></h2>
+      <ul class="tools" id="tools"></ul>
+      <div class="hint" style="margin-top:8px">所有数字都由这些工具从确定性代码中取出，模型无法凭空生成。</div>
+    </section>
+
+    <section>
+      <h2>决策清单 <span class="hint">点「接受」即计入预计收益</span></h2>
+      <div id="actions"></div>
+      <div class="summary" id="decisionsummary"></div>
+    </section>
+
     <section>
       <h2>浪费明细（按金额降序）</h2>
       <div style="overflow-x:auto"><table id="tbl"></table></div>
@@ -60,7 +103,8 @@ td.num{text-align:right;font-variant-numeric:tabular-nums}
     <div class="hint">
       浪费卡时 = 申请未用卡时 + 低效折算卡时（利用率低于 30% 时按 <code>使用卡数 × 时长 × (1 − 利用率)</code> 折算）；
       电耗按 单卡 TDP × 0.25（空转功率系数）折算；电费 ¥0.70/kWh；
-      碳排因子 0.581 kgCO₂e/kWh（全国电网平均）。完整假设见仓库 <code>docs/architecture.md</code>。
+      碳排因子 0.581 kgCO₂e/kWh（全国电网平均）；时段曲线为简化近似，非实测数据。
+      完整假设见仓库 <code>docs/architecture.md</code>。
     </div>
   </section>
 </div>
@@ -68,11 +112,12 @@ td.num{text-align:right;font-variant-numeric:tabular-nums}
 const $ = (s) => document.querySelector(s);
 const fmt = (n, d = 0) => Number(n).toLocaleString('zh-CN', { maximumFractionDigits: d });
 const money = (n) => '¥' + fmt(n, 0);
+const decisions = {};
 
 $('#run').addEventListener('click', async () => {
   const btn = $('#run');
   btn.disabled = true;
-  $('#status').textContent = '分析中…';
+  $('#status').textContent = '分析中（AI 正在调用工具取数，可能需要十几秒）…';
   try {
     const res = await fetch('/api/analyze', {
       method: 'POST',
@@ -90,40 +135,107 @@ $('#run').addEventListener('click', async () => {
 });
 
 function render(data) {
+  for (const k in decisions) delete decisions[k];
+
   const s = data.summary;
-  const cards = [
+  $('#cards').innerHTML = [
     ['浪费卡时', fmt(s.total_waste_card_hours), '卡时'],
     ['浪费电费', money(s.total_waste_cost_cny), ''],
     ['浪费电耗', fmt(s.total_waste_energy_kwh), 'kWh'],
     ['碳排当量', fmt(s.total_waste_carbon_kg), 'kgCO₂e']
-  ];
-  $('#cards').innerHTML = cards.map(([k, v, u]) =>
+  ].map(([k, v, u]) =>
     `<div class="card"><div class="k">${k}</div><div class="v warn">${v}<span class="u">${u}</span></div></div>`
   ).join('');
 
+  renderCurve(data.carbon_profile, data.carbon_peak);
+
+  const ai = data.ai || {};
+  $('#aimode').textContent = ai.mode === 'gemini'
+    ? `由 ${ai.model} 自主调用工具生成`
+    : (ai.mode === 'fallback' ? '（模型调用失败，已降级为离线模板）' : '（离线模板，未配置 GEMINI_API_KEY）');
+  $('#aitext').textContent = ai.text || '';
+
+  const calls = ai.tool_calls || [];
+  $('#toolcount').textContent = calls.length ? `共 ${calls.length} 次` : '（离线模式无工具调用）';
+  $('#tools').innerHTML = calls.length
+    ? calls.map((c) => `<li><b>${c.name}</b><span>${JSON.stringify(c.args)}</span></li>`).join('')
+    : '<li><span>离线模式未调用工具，结论来自规则模板。</span></li>';
+
+  renderActions(ai.actions || []);
+
   const rows = data.records.slice().sort((a, b) => b.waste_cost_cny - a.waste_cost_cny);
-  const head = ['云', '节点', '卡型', '申请', '使用', '时长(h)', '利用率(%)', '浪费卡时', '浪费金额', '模式', '等级'];
+  const head = ['云', '节点', '卡型', '申请', '使用', '时长(h)', '利用率(%)', '起始(h)', '浪费卡时', '浪费金额', '模式', '等级'];
   const body = rows.map((r) => `<tr>
-    <td>${r.cloud}</td>
-    <td>${r.node}</td>
-    <td>${r.gpu_type}</td>
-    <td class="num">${r.requested_cards}</td>
-    <td class="num">${r.used_cards}</td>
-    <td class="num">${fmt(r.hours)}</td>
-    <td class="num">${fmt(r.avg_util_pct, 1)}</td>
-    <td class="num">${fmt(r.waste_card_hours)}</td>
-    <td class="num">${money(r.waste_cost_cny)}</td>
+    <td>${r.cloud}</td><td>${r.node}</td><td>${r.gpu_type}</td>
+    <td class="num">${r.requested_cards}</td><td class="num">${r.used_cards}</td>
+    <td class="num">${fmt(r.hours)}</td><td class="num">${fmt(r.avg_util_pct, 1)}</td>
+    <td class="num">${r.start_hour}</td>
+    <td class="num">${fmt(r.waste_card_hours)}</td><td class="num">${money(r.waste_cost_cny)}</td>
     <td>${r.pattern_label}</td>
     <td><span class="tag ${r.severity}">${r.severity}</span></td>
   </tr>`).join('');
   $('#tbl').innerHTML = `<thead><tr>${head.map((h) => `<th>${h}</th>`).join('')}</tr></thead><tbody>${body}</tbody>`;
 
-  const ai = data.ai || {};
-  $('#aimode').textContent = ai.mode === 'gemini'
-    ? `由 ${ai.model} 生成`
-    : (ai.mode === 'fallback' ? '（模型调用失败，已降级为离线模板）' : '（离线模板，未配置 GEMINI_API_KEY）');
-  $('#aitext').textContent = ai.text || '';
   $('#result').style.display = 'block';
+}
+
+function renderCurve(profile, peak) {
+  if (!profile) { $('#curve').innerHTML = ''; return; }
+  const hours = profile.hourly_factor;
+  const max = Math.max(...hours), min = Math.min(...hours);
+  $('#curve').innerHTML = hours.map((v, h) => {
+    const pct = Math.round(100 * (v - min + 0.06) / (max - min + 0.06));
+    const cls = h === peak.best_hour ? 'best' : (h === peak.worst_hour ? 'worst' : '');
+    return `<i class="${cls}" style="height:${Math.max(pct, 6)}%" title="${h}:00 相对强度 ${v}"></i>`;
+  }).join('');
+  $('#curveaxis').innerHTML = hours.map((_, h) => `<span>${h % 6 === 0 ? h : ''}</span>`).join('');
+  $('#curvehint').textContent =
+    `最优 ${peak.best_hour}:00 ｜ 最差 ${peak.worst_hour}:00 ｜ ${profile.note}`;
+}
+
+function renderActions(actions) {
+  if (!actions.length) {
+    $('#actions').innerHTML = '<div class="hint">本次没有登记任何建议。若为在线模式，说明模型未调用 propose_action。</div>';
+    updateSummary(actions);
+    return;
+  }
+  $('#actions').innerHTML = actions.map((a) => `
+    <div class="action" id="act-${a.id}">
+      <div class="t">${a.id}｜${a.title}</div>
+      <div class="d">${a.detail}</div>
+      <div class="m">
+        预计回收 <b>${money(a.expected_cost_recovery_cny)}</b> ｜
+        预计减碳 <i>${fmt(a.expected_carbon_reduction_kg, 1)} kgCO₂e</i> ｜
+        实施成本 ${a.effort}${a.evidence ? ' ｜ 依据：' + a.evidence : ''}
+      </div>
+      <button class="mini accept" data-id="${a.id}" data-d="accept">接受</button>
+      <button class="mini reject" data-id="${a.id}" data-d="reject">拒绝</button>
+    </div>`).join('');
+
+  $('#actions').querySelectorAll('button').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const id = btn.dataset.id;
+      decisions[id] = btn.dataset.d;
+      const box = document.getElementById('act-' + id);
+      box.classList.toggle('done', decisions[id] === 'accept');
+      box.classList.toggle('denied', decisions[id] === 'reject');
+      box.querySelectorAll('button').forEach((b) => { b.disabled = true; });
+      updateSummary(actions);
+    });
+  });
+  updateSummary(actions);
+}
+
+function updateSummary(actions) {
+  const accepted = actions.filter((a) => decisions[a.id] === 'accept');
+  const rejected = actions.filter((a) => decisions[a.id] === 'reject');
+  const cost = accepted.reduce((n, a) => n + a.expected_cost_recovery_cny, 0);
+  const co2 = accepted.reduce((n, a) => n + a.expected_carbon_reduction_kg, 0);
+  $('#decisionsummary').innerHTML =
+    `<span>已接受 <b>${accepted.length}</b> / ${actions.length} 项</span>` +
+    `<span>已拒绝 ${rejected.length} 项</span>` +
+    `<span>预计可回收 <b class="warn">${money(cost)}</b></span>` +
+    `<span>预计减碳 <b style="color:var(--ok)">${fmt(co2, 1)} kgCO₂e</b></span>`;
 }
 </script>
 </body>
