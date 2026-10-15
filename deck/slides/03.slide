@@ -1,4 +1,4 @@
-// 03 · 章节扉页 01 —— 深底 + 网格 + 巨型「94」
+// 03: problem section, preserving the large Xid 94.
 const FONT = 'Inter, "Helvetica Neue", Arial, sans-serif';
 const MONO = '"JetBrains Mono", "SF Mono", Menlo, monospace';
 const BLUE = '#2F6BFF';
@@ -28,16 +28,16 @@ const GRID_Y = [0, 64, 128, 192, 256, 320, 384, 448, 512, 576];
         <Box style={{ position: 'relative', width: 820, height: 576, justifyContent: 'center', gap: 18 }}>
             <Text style={{ fontFamily: MONO, fontSize: 14, color: BLUE, letterSpacing: 3 }}>CHAPTER 01</Text>
             <Text style={{ fontSize: 64, fontWeight: 700, color: '#FFFFFF', lineHeight: 1.1 }}>The problem</Text>
-            <Text style={{ fontSize: 24, color: '#94A3B8', lineHeight: 1.5 }}>The same error code, two opposite mistakes</Text>
+            <Text style={{ fontSize: 24, color: '#94A3B8', lineHeight: 1.5 }}>Hardware escalation after a training failure</Text>
             <Box style={{ width: 88, height: 3, background: 'rgba(255,255,255,0.28)', marginTop: 14 }} />
             <Text style={{ fontSize: 18, color: '#C7D2E0', lineHeight: 1.65, width: 760 }}>
-                Calling a dying card healthy burns weeks of compute on it. Calling a healthy card dying pulls a
-                working GPU out of the pool. Both are expensive, and telling the two apart is the whole problem.
+                Unnecessary repair removes a working GPU from the pool. Missed hardware deterioration can
+                cause repeated training failures. Error frequency and ECC history help distinguish these cases.
             </Text>
         </Box>
 
         <Box style={{ position: 'absolute', left: 0, bottom: 0, width: 1136, flexDirection: 'row', justifyContent: 'flex-end' }}>
-            <Text style={{ fontFamily: MONO, fontSize: 14, color: 'rgba(255,255,255,0.45)' }}>03 / 14</Text>
+            <Text style={{ fontFamily: MONO, fontSize: 14, color: 'rgba(255,255,255,0.45)' }}>03 / 15</Text>
         </Box>
 
     </Box>

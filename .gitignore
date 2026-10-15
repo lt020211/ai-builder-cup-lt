@@ -120,7 +120,7 @@ shots-reburn/
 # ============================================================
 # deck 的可再生产物
 # 源是 deck/slides/*.slide + deck/make_crops.py + deck/make_pdf.py；
-# render/ 是 slidep 渲染出的 14 张 1920×1080 页图，两者都能从 DSL 重跑出来。
+# render/ 是 slidep 渲染出的 15 张 1920×1080 页图，两者都能从 DSL 重跑出来。
 # 提交的是 docs/Training-Failure-Triage-deck.pdf。
 # （deck/.cache/ 已被上面的 `.cache/` 规则覆盖）
 #

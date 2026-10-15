@@ -1,18 +1,5 @@
-/**
- * 确定性预分析层。
- *
- * ────────────────────────────────────────────────────────────────────────
- * 为什么要有这一层
- * ────────────────────────────────────────────────────────────────────────
- * 分诊这件事可以拆成两半：
- *   「能算的」——从日志里抠出 Xid 码、正则匹配已知特征、比对版本号、核算显存需求；
- *   「要判断的」——这些线索合起来到底是哪一类故障，先动哪个。
- *
- * 前者交给代码（可复现、可单测、不会出错），后者交给模型。这样模型的输出
- * 永远建立在确定的事实上，而界面上也能把「已确证」和「模型推断」分开展示。
- *
- * 本文件不依赖任何网络与模型，纯函数。
- */
+/** Deterministic, offline pre-analysis extracts log facts, compatibility checks, and memory estimates before model inference. */
+/** Keep confirmed facts separate from classification hints. */
 
 import {
   XID_TABLE,
@@ -25,17 +12,14 @@ import {
   CLASSES,
 } from './kb.js';
 
-// ======================================================================
-// 通用小工具
-// ======================================================================
-/** 把版本号归一化成数字数组：'535.104.12' → [535, 104, 12]。 */
+/** Normalize a version string to numeric components. */
 export function parseVersion(v) {
   const m = String(v ?? '').match(/\d+(?:\.\d+)*/);
   if (!m) return null;
   return m[0].split('.').map((n) => Number(n));
 }
 
-/** 版本比较：a > b → 1，a < b → -1，相等 → 0。缺位补 0。 */
+/** Compare versions, padding missing components with zero. */
 export function compareVersions(a, b) {
   const pa = parseVersion(a);
   const pb = parseVersion(b);
@@ -50,14 +34,14 @@ export function compareVersions(a, b) {
   return 0;
 }
 
-/** 取 CUDA 的「大版本.小版本」，丢掉补丁位：'12.6.3' → '12.6'。 */
+/** Return the CUDA major.minor version. */
 export function cudaShort(v) {
   const p = parseVersion(v);
   if (!p) return null;
   return p.length >= 2 ? `${p[0]}.${p[1]}` : String(p[0]);
 }
 
-/** 取 torch 的「大版本.小版本」：'2.6.0+cu124' → '2.6'。 */
+/** Return the torch major.minor version. */
 export function torchShort(v) {
   const p = parseVersion(v);
   if (!p) return null;
@@ -68,26 +52,14 @@ function round1(v) {
   return Math.round(v * 10) / 10;
 }
 
-// ======================================================================
-// 1. 从日志里提取 Xid
-// ======================================================================
-/**
- * 真实日志里 Xid 有多种写法，必须都覆盖：
- *     NVRM: Xid (PCI:0000:3b:00): 79, GPU has fallen off the bus.
- *     [ 1234.5] NVRM: Xid (PCI:0000:3b:00): 48, pid='1234', ...
- *     Xid 13
- *     xid=94
- */
+/** Recognize supported Xid formats from kernel logs. */
 const XID_PATTERNS = [
   /NVRM:\s*Xid\s*\([^)]*\)\s*:\s*(\d{1,3})/gi,
   /\bXid\s*[:=]?\s*(\d{1,3})\b/gi,
   /\bxid\s*[:=]\s*(\d{1,3})\b/gi,
 ];
 
-/**
- * 抽取日志中所有 Xid 码，按出现顺序去重计数。
- * 返回 [{ code, count, known, entry }]，未知码也会返回（entry 为 null）。
- */
+/** Count Xids in encounter order; retain unknown codes with a null entry. */
 export function extractXids(text) {
   const found = new Map();
   for (const re of XID_PATTERNS) {
@@ -95,7 +67,7 @@ export function extractXids(text) {
     let m;
     while ((m = re.exec(text)) !== null) {
       const code = Number(m[1]);
-      // 排除误伤：Xid 码不会超过 3 位且不会为 0
+
       if (!Number.isInteger(code) || code <= 0 || code > 999) continue;
       found.set(code, (found.get(code) || 0) + 1);
     }
@@ -110,10 +82,7 @@ export function extractXids(text) {
     }));
 }
 
-// ======================================================================
-// 2. 匹配故障特征
-// ======================================================================
-/** 返回命中的签名列表。只做字面匹配，不下结论。 */
+/** Return literal signature matches without drawing a conclusion. */
 export function matchSignatures(text) {
   const hits = [];
   for (const sig of FAILURE_SIGNATURES) {
@@ -133,15 +102,7 @@ export function matchSignatures(text) {
   return hits;
 }
 
-// ======================================================================
-// 3. 版本兼容自检
-// ======================================================================
-/**
- * 校验 driver / cuda_runtime / torch 三者是否自洽。
- *
- * 返回 { ok, issues: [{level, code, message, fix}] }。
- * level：'error' 表示这个组合根本起不来；'warn' 表示能跑但有隐患。
- */
+/** Validate driver, CUDA runtime, and torch compatibility; errors block use and warnings require manual checks. */
 export function checkCompatibility(env = {}) {
   const issues = [];
   const info = {
@@ -151,51 +112,48 @@ export function checkCompatibility(env = {}) {
     nccl: env.nccl || null,
   };
 
-  // (a) torch 官方 wheel 是否支持这个 CUDA
   if (info.torch && info.cuda_runtime) {
     const supported = TORCH_CUDA[info.torch];
     if (!supported) {
       issues.push({
         level: 'warn',
         code: 'torch_version_unknown',
-        message: `版本矩阵里没有 PyTorch ${info.torch} 的记录，无法自动核对。`,
-        fix: '请人工确认该版本的官方支持列表。',
+        message: `PyTorch ${info.torch} is absent from the version snapshot, automatic validation is unavailable.`,
+        fix: 'Check the official support list for this version.',
       });
     } else if (!supported.includes(info.cuda_runtime)) {
       issues.push({
         level: 'error',
         code: 'torch_cuda_mismatch',
         message:
-          `PyTorch ${info.torch} 的官方 wheel 支持 CUDA ${supported.join(' / ')}，` +
-          `但当前运行时是 CUDA ${info.cuda_runtime}。`,
-        fix: `改用 cu${info.cuda_runtime.replace('.', '')} 后缀的 wheel，或把 CUDA 换成 ${supported.join('/')} 之一。`,
+          `Official PyTorch ${info.torch} wheels support CUDA ${supported.join(' / ')}, ` +
+          `but the current runtime is CUDA ${info.cuda_runtime}.`,
+        fix: `Use a cu${info.cuda_runtime.replace('.', '')} wheel or switch CUDA to ${supported.join('/')}.`,
       });
     }
   }
 
-  // (b) 驱动是否满足该 CUDA 运行时的最低版本
   if (info.driver && info.cuda_runtime) {
     const need = CUDA_DRIVER_MIN[info.cuda_runtime];
     if (!need) {
       issues.push({
         level: 'warn',
         code: 'cuda_version_unknown',
-        message: `版本矩阵里没有 CUDA ${info.cuda_runtime} 的最低驱动要求，无法自动核对。`,
-        fix: '查 CUDA Toolkit Release Notes 确认最低驱动版本。',
+        message: `The snapshot has no minimum driver requirement for CUDA ${info.cuda_runtime}; automatic validation is unavailable.`,
+        fix: 'Check the minimum driver in CUDA Toolkit Release Notes.',
       });
     } else if (compareVersions(info.driver, need) < 0) {
       issues.push({
         level: 'error',
         code: 'driver_too_old',
         message:
-          `驱动 ${info.driver} 低于 CUDA ${info.cuda_runtime} 要求的最低版本 ${need}，` +
-          `该 CUDA 运行时无法启动。`,
-        fix: `把驱动升级到 ${need} 或更高；或把框架降到与当前驱动匹配的 CUDA 版本。`,
+          `Driver ${info.driver} is below the minimum ${need} for CUDA ${info.cuda_runtime}; ` +
+          `this runtime cannot start.`,
+        fix: `Upgrade the driver to ${need} or later, or use a framework CUDA version compatible with the current driver.`,
       });
     }
   }
 
-  // (c) 驱动自身的 CUDA 支持上限
   if (info.driver && info.cuda_runtime) {
     const ceiling = driverCeiling(info.driver);
     if (ceiling && compareVersions(info.cuda_runtime, ceiling) > 0) {
@@ -203,9 +161,9 @@ export function checkCompatibility(env = {}) {
         level: 'error',
         code: 'driver_below_cuda',
         message:
-          `驱动 ${info.driver} 最多支持到 CUDA ${ceiling}，` +
-          `但运行时要求 CUDA ${info.cuda_runtime}。`,
-        fix: `升级驱动，或把 CUDA 运行时降到 ${ceiling}。`,
+          `Driver ${info.driver} supports up to CUDA ${ceiling}, ` +
+          `but the runtime requires CUDA ${info.cuda_runtime}.`,
+        fix: `Upgrade the driver or lower the CUDA runtime to ${ceiling}.`,
       });
     }
   }
@@ -213,7 +171,7 @@ export function checkCompatibility(env = {}) {
   return { ok: !issues.some((i) => i.level === 'error'), info, issues };
 }
 
-/** 按驱动版本推出它支持的最高 CUDA。 */
+/** Find the maximum supported CUDA version for a driver. */
 export function driverCeiling(driver) {
   for (const row of DRIVER_CUDA_CEILING) {
     if (compareVersions(driver, row.driver_min) >= 0) return row.cuda;
@@ -221,33 +179,10 @@ export function driverCeiling(driver) {
   return null;
 }
 
-// ======================================================================
-// 4. 训练显存估算
-// ======================================================================
-/**
- * 训练显存估算。
- *
- * ────────────────────────────────────────────────────────────────────────
- * 设计原则：**给区间，不给假精确**
- * ────────────────────────────────────────────────────────────────────────
- * 模型状态（参数 / 梯度 / 优化器 / 主权重）是**结构性的**，能算准；
- * 激活值则强烈依赖注意力实现（FlashAttention 把中间矩阵全部消掉了）、
- * 重计算策略与框架版本，任何公式都只是量级估算。
- *
- * 所以本函数把两者分开报：状态部分是精确值，激活值给低/中/高三档区间。
- * 这样评审能看懂每一档是怎么来的，而不是面对一个无法验证的小数。
- *
- * 术语（mixed precision + Adam + ZeRO 的通用记账口径）：
- *   参数（bf16）        2 字节/参数
- *   梯度（bf16）        2 字节/参数
- *   fp32 主权重         4 字节/参数   ← mixed precision 才有
- *   Adam m / v（fp32）  8 字节/参数
- *   合计 16 字节/参数（这也是为什么 fp32 训练与 mixed precision 的
- *   状态开销量级相同——前者省掉主权重但参数与梯度翻倍）
- */
+/** Compute model-state memory from precision and sharding; report activation estimates as low/mid/high ranges with CUDA overhead and a 10% capacity reserve. */
 export function estimateTrainingMemory(spec = {}) {
   const paramsB = Number(spec.model_params_b ?? spec.params_b ?? 0);
-  if (!(paramsB > 0)) return { error: 'model_params_b 必须是正数（单位：十亿参数）' };
+  if (!(paramsB > 0)) return { error: 'model_params_b must be positive (billions of parameters)' };
 
   const precision = String(spec.precision || 'bf16').toLowerCase();
   const isFp32 = precision === 'fp32' || precision === 'float32';
@@ -265,12 +200,9 @@ export function estimateTrainingMemory(spec = {}) {
   const paramBytes = P * pbytes;
   const gradBytes = P * pbytes;
   const optimBytes = P * 8;
-  // mixed precision 才需要单独存一份 fp32 主权重
+
   const masterBytes = isFp32 ? 0 : P * 4;
 
-  // ---- 模型状态（精确）----
-  // 张量并行先把模型切了，ZeRO 再在数据并行组内逐级切分：
-  //   stage 0 不切；stage 1 切优化器状态；stage 2 再切梯度；stage 3 连参数一起切。
   const byTp = (b) => b / tp;
   const optimPlusMaster = optimBytes + masterBytes;
 
@@ -285,31 +217,24 @@ export function estimateTrainingMemory(spec = {}) {
     statesBytes = byTp(paramBytes + gradBytes + optimPlusMaster) / dp;
   }
 
-  // ---- 激活值（估算区间）----
   const batch = Number(spec.batch_size ?? spec.batch ?? 1);
   const seq = Number(spec.seq_len ?? spec.seq ?? 2048);
   const hidden = Number(spec.hidden_size ?? 4096);
   const layers = Number(spec.num_layers ?? spec.layers ?? 32);
 
-  // 激活值系数：重计算把中间激活丢掉了大部分；FlashAttention 消掉注意力矩阵。
   //
-  // 取值依据（用 Llama-70B / seq 4096 / batch 1 做标定，该配置实测激活值约 25 GB）：
-  //   开启重计算      → 只剩层边界激活，约 1.5
-  //   FlashAttention  → 每层约 5 倍 hidden 状态（标准量级）
-  //   无 FlashAttn    → 注意力矩阵 b·heads·s·s 成为主导项，量级跳到 30 左右，
-  //                     这正是「换个注意力实现能省几十 GB」的原因
+
   let factor;
   if (recompute) factor = 1.5;
   else if (flash) factor = 5;
   else factor = 30;
 
   const actBase = batch * seq * hidden * layers * pbytes * factor;
-  // 业界经验上这个量级误差在 ±30% 左右，所以给低/中/高三档而不是一个数
+
   const actLow = actBase * 0.75;
   const actMid = actBase;
   const actHigh = actBase * 1.3;
 
-  // 每个进程还有固定的 CUDA context / cuBLAS workspace 开销
   const overheadGb = 1.0;
 
   const g = (b) => round1(b / GB);
@@ -318,13 +243,12 @@ export function estimateTrainingMemory(spec = {}) {
   const totalMid = round1(statesGb + g(actMid) + overheadGb);
   const totalHigh = round1(statesGb + g(actHigh) + overheadGb);
 
-  // ---- 与卡型容量比对 ----
   const gpuKey = GPU_ALIASES[String(spec.gpu_type || '').toLowerCase()] || spec.gpu_type;
   const capacity = GPU_MEMORY_GB[gpuKey] ?? null;
   let fit = null;
   let usable = null;
   if (capacity) {
-    // 预留 10%：显存池碎片与临时分配几乎必然发生
+
     usable = round1(capacity * 0.9);
     if (totalHigh <= usable) fit = 'comfortable';
     else if (totalLow <= usable) fit = 'tight';
@@ -364,26 +288,23 @@ export function estimateTrainingMemory(spec = {}) {
     fit,
     activation_factor: factor,
     notes: [
-      '模型状态（参数/梯度/优化器/主权重）按标准的 16 字节/参数口径精确计算。',
-      `激活值系数取 ${factor}（${recompute ? '开启重计算' : flash ? '无重计算 + FlashAttention' : '无重计算且无 FlashAttention'}），` +
-        '这是量级估算，因此以区间形式给出。',
+      'Model states (parameters, gradients, optimizer, master weights) use the standard 16-byte-per-parameter accounting.',
+      `Activation factor: ${factor} (${recompute ? 'recomputation enabled' : flash ? 'FlashAttention without recomputation' : 'no recomputation or FlashAttention'}). ` +
+        'Activations are an estimate and are reported as a range.',
       capacity
-        ? `按 ${gpuKey} 单卡 ${capacity} GB、预留 10% 计，可用约 ${usable} GB。`
-        : '未指定卡型，无法判断能否装下。',
+        ? `${gpuKey}: ${capacity} GB per GPU, approximately ${usable} GB usable after a 10% reserve.`
+        : 'GPU type is unspecified; capacity fit cannot be determined.',
     ],
     source: 'https://pytorch.org/docs/stable/notes/cuda.html#memory-management',
   };
 }
 
-// ======================================================================
-// 5. 证据包归一化 + 预分析
-// ======================================================================
-/** 把案例对象归一化成一份证据包。字段缺失时给出空值而不是抛错。 */
+/** Normalize missing evidence fields to empty values without throwing. */
 export function normalizeEvidence(caseObj = {}) {
   const ev = caseObj.evidence || caseObj;
   return {
     id: caseObj.id || 'adhoc',
-    title: caseObj.title || '未命名案例',
+    title: caseObj.title || 'Untitled case',
     subtitle: caseObj.subtitle || '',
     reported_at: ev.reported_at || '',
     job: {
@@ -407,7 +328,7 @@ export function normalizeEvidence(caseObj = {}) {
   };
 }
 
-/** 把证据包拼成一段可供正则匹配的纯文本。 */
+/** Join evidence fields for literal log recognition. */
 export function evidenceToText(ev) {
   const parts = [
     ev.stderr_excerpt,
@@ -419,19 +340,13 @@ export function evidenceToText(ev) {
   return parts.filter(Boolean).join('\n');
 }
 
-/**
- * 预分析：把「能算的」全算出来。
- *
- * 返回对象里，`confirmed` 是代码确证的事实，`hints` 是倾向性提示（不是结论）。
- * 界面上这两块会分开渲染——这是「哪些是算的、哪些是模型判断的」的边界。
- */
+/** Keep confirmed facts separate from classification hints. */
 export function preAnalyze(ev) {
   const text = evidenceToText(ev);
   const xids = extractXids(text);
   const signatures = matchSignatures(text);
   const compat = checkCompatibility(ev.environment || {});
 
-  // 显存：只有训练配置齐全时才估算
   const cfg = ev.training_config || {};
   const hasMemInputs = Number(cfg.model_params_b) > 0;
   const memory = hasMemInputs
@@ -441,11 +356,9 @@ export function preAnalyze(ev) {
       })
     : null;
 
-  // 遥测里若有 Xid 历史，一并纳入
   const telemetry = ev.node_telemetry || null;
   const telemetryXids = telemetry?.xid_events || [];
 
-  // 汇总各来源对分类的「投票」，仅作为提示
   const votes = {};
   const vote = (cls, weight, why) => {
     if (!cls) return;
@@ -455,18 +368,18 @@ export function preAnalyze(ev) {
   };
 
   for (const x of xids) {
-    if (x.entry) vote(x.entry.class, 3, `Xid ${x.code}（${x.entry.name}）`);
+    if (x.entry) vote(x.entry.class, 3, `Xid ${x.code} (${x.entry.name})`);
   }
   for (const s of signatures) {
-    vote(s.class_hint, 2, `特征「${s.label}」`);
+    vote(s.class_hint, 2, `Signature: ${s.label}`);
   }
   if (telemetryXids.length) {
     for (const t of telemetryXids) {
       const e = XID_TABLE[t.code];
-      if (e) vote(e.class, 2, `节点遥测记录 Xid ${t.code}`);
+      if (e) vote(e.class, 2, `Node telemetry recorded Xid ${t.code}`);
     }
   }
-  if (!compat.ok) vote('environment', 3, '版本栈不自洽');
+  if (!compat.ok) vote('environment', 3, 'Software stack is incompatible');
 
   const hints = Object.values(votes)
     .sort((a, b) => b.weight - a.weight)
@@ -494,7 +407,7 @@ export function preAnalyze(ev) {
   };
 }
 
-/** 给工具与提示词用的紧凑证据摘要。 */
+/** Build a compact evidence digest for tools and prompts. */
 export function evidenceDigest(ev, pre) {
   return {
     case_id: ev.id,
@@ -517,27 +430,7 @@ export function evidenceDigest(ev, pre) {
   };
 }
 
-// ======================================================================
-// 规则基线（F8 的对照物）
-// ======================================================================
-/**
- * ★ 这个函数存在的唯一目的，是给 AI 分诊提供一个**可复现的对照**：
- * 「如果只用规则，能判对多少？」
- *
- * 它不是产品逻辑——产品逻辑是模型基于多条证据做判断。界面上也会明确标注
- * 它是「基线」，并和 AI 的结果并排展示。
- *
- * 它刻意**只做最朴素的两步**，不做任何修补：
- *   1. 取预分析投票得分最高的分类；
- *   2. 分类是 hardware 就建议报修，其余一律不建议。
- *
- * 这正是真实世界里的常见做法：看 Xid 码查表 → 表里写硬件就报修。
- * 它会错在两类案例上——**需要读趋势的**和**需要辨因果链的**。
- * 这两类恰好是模型能做好、规则做不好的地方，所以这个对照才有说服力。
- *
- * ⚠️ 如果要让基线表现更好，**不要改这个函数**，那等于把对照物也变成 AI。
- * 正确的做法是把它当成「朴素规则能达到的上限」，如实报告它错在哪几题。
- */
+/** Keep confirmed facts separate from classification hints. */
 export function ruleBasedTriage(ev, pre = null) {
   const p = pre || preAnalyze(ev);
   const hints = p.hints || [];
@@ -547,21 +440,15 @@ export function ruleBasedTriage(ev, pre = null) {
   return {
     method: 'rule-baseline',
     class: cls,
-    // 朴素规则：表里写硬件就报修，观察项与其它分类一律不报修。
-    // 它读不出「同一个 Xid 94，偶发与频次上升要区别对待」，这是设计上就做不到的。
+
     should_rma: cls === 'hardware',
     confidence: top ? Math.min(0.85, 0.35 + 0.05 * top.weight) : 0.1,
     basis: top ? top.why.slice() : [],
-    note: '取投票最高的分类；分类为硬件即建议报修，否则不建议。不读趋势、不辨因果链。',
+    note: 'Select the highest-voted class; recommend repair only for hardware. This baseline does not analyze trends or causal chains.',
   };
 }
 
-/**
- * 对比一次分诊结果与案例的期望值。供 F8 的基准统计与界面并排展示使用。
- *
- * 只比两个字段：class 与 should_rma。理由很简单——这两个是「能被当场证伪的
- * 布尔值」，比一比「叙述写得好不好」客观得多。
- */
+/** Compare classification and should_rma for benchmark reporting. */
 export function compareWithExpected(result, expected) {
   if (!expected) return null;
   const classOk = result.class === expected.class;

@@ -1,77 +1,49 @@
-# STORY.md — Training Failure Triage（方案说明 deck）
+# Training Failure Triage deck narrative
 
-## ① 用户意图对齐
+The 15-page submission explains how the browser application assesses training failures and controls proposed actions on a simulated GPU cluster. It addresses AI Builder Cup 2026 JAPAC technical reviewers.
 
-- **目标受众**：Google Cloud AI Builder Cup 2026（JAPAC）技术评审——坐在评审席上的是云平台工程师与
-  Gen AI 方向的工程负责人。他们**每天在判的就是同一类问题**，所以糊弄不过去；同时他们看过的
-  「套壳 chat bot」非常多，对「AI 写了一段话」这种演示免疫。
-- **核心目标**：讲完后让他们相信三件事，并且相信的理由是**屏幕上看得见的**：
-  1. 这个 AI **不生成数字，它去取数字**（每一条结论都能指回某次工具调用）；
-  2. 它**真的动手了，而且动手之后自己回读确认**（有一本操作日志，每条都带回验结果）；
-  3. 「这件事规则做不好」是**可证伪的**——同一个案例库上，纯规则路径是 11/14，
-     错的三题各对应一条诊断原则，评委可以自己在浏览器里点一遍。
-  希望他们做的一件事：**点开线上链接自己验一遍**。
-- **PPT 长度**：14 页（Hero 页 4 个 = 28.6%，落在 20–30% 区间内；首尾默认 Hero，中段两个数据高潮）。
-- **视觉调性**：工程纪实 / 证据优先 / 高密度克制 / 反营销。**不炫技、不喊口号、不摆价值观大字**。
-  所有主视觉都是**产品的真实截图**——这份 deck 的论点就是「你看真的东西」，
-  所以不放氛围图、不放 AI 生成的抽象插图。
-- **内容边界**：
-  - **必讲**：同一个错误码给出相反结论（全篇最值钱的一屏）；执行是真的且执行后回验；
-    工具调用轨迹与引用编号；风险等级不从模型来；11/14 的可复现对照；五层架构；安全边界。
-  - **不讲**：上一版选题（GPU 浪费审计 / 碳感知调度）的任何内容；任何跑不出来的成绩；
-    任何「我们的准确率是 X%」的自我宣称（准确率由页面自动统计，未跑满即为空）。
-  - **禁碰**：把模拟集群说成真实集群；把「人点一下开始」说成「常驻服务主动巡检」；
-    把通知队列说成「已经发到 IM 了」。**这三条都是诚实边界，主动写在页面上而不等人问。**
+## Chapters
 
-## ② 页面布局骨架
+| Chapter | Title | Pages |
+| --- | --- | --- |
+| 1 | The problem | 3-5 |
+| 2 | Application workflow | 6-10 |
+| 3 | Evidence and limits | 11-15 |
 
-**页面总数 14 页，分 3 章**，目录页（02）声明 3 章，
-于是全篇**有且仅有 3 个章节扉页**：**03 / 06 / 11**，编号 01..03 连续，标题与页码区间与目录逐字一致。
+The cover and overview precede the three chapters. Existing section pages remain at 3, 6 and 11. The deck retains its supplied layout sequence and page count.
 
-| 章节 | 目录条目（02 页原文） | 扉页 | 页码区间 |
-| :- | :--- | :--- | :--- |
-| 01 | The problem — 方向搞反比漏报更贵 | 03 | 03–05 |
-| 02 | What we built — 一个能自己走完值班的 Agent | 06 | 06–10 |
-| 03 | Evidence & boundaries — 证据、对照与边界 | 11 | 11–14 |
+## Slide content
 
-**Hero 页定位**：01（封面）、05（同码相反结论）、12（11/14 基准）、14（结束页）。合计 4/14 = 28.6%。
-任意两个 Hero 之间至少隔 1 个 supporting 页 ✓。
+| Page | Title | Content |
+| --- | --- | --- |
+| 1 | Training Failure Triage | Software versus hardware diagnosis with evidence and action risk controls. The background 11/14 refers to the joint rule score. |
+| 2 | Submission overview | The Xid contrast, application workflow and benchmark scope. |
+| 3 | The problem | Unnecessary repair removes capacity. Missed deterioration can cause repeated failures. |
+| 4 | Xid 94 escalation errors | A contained memory error needs severity history before an RMA assessment. |
+| 5 | Xid 94 frequency and ECC trends | lyg2103 has one event and correctable ECC 1 with a flat trend. lyg2112 has 53 events and correctable ECC 118 with a rising trend. The second case supports an RMA recommendation. |
+| 6 | Application workflow | A human starts a patrol. The historical demo patrol made 17 tool calls. Each model attempt permits up to 12 turns and fallback carries completed calls forward. |
+| 7 | Cluster inspection | Six constructed seed nodes, four with anomaly signals, and no pasted log input for patrol. The English screenshot uses local seed replay. |
+| 8 | Action verification | The earlier recorded run verified two cordons, setting lyg2112 and lyg2115 cordoned from false to true. The English screenshot replays those two events locally. |
+| 9 | Action risk and approval | 14 actions comprise 6 low, 5 medium and 3 high risk. The library supplies risk. Automatic execution allows only low risk. The discouraged timeout action is excluded. |
+| 10 | Triage tool trace | Four replayed calls for case-xid94-rising, with hardware/RMA recommendation and fixture confidence 0.95. The screenshot shows the application rendering English arguments and reference IDs. |
+| 11 | Evidence and limits | The joint F8 rule score is 11/14. Constructed cases do not establish production accuracy. There is no aggregate AI score. |
+| 12 | Rule benchmark results | 11/14 (78.6%) joint F8, classification 11/14, RMA 12/14. All 14 cases appear in the table and AI results show Not run. |
+| 13 | Application architecture | Knowledge, local pre-analysis, mode-specific tools, model attempts and risk-gated execution. Prompt instructions and code checks have distinct responsibilities. |
+| 14 | Evidence support and REA | Snapshot and live tiers are implemented. The artifact tier has no producer and requests raise an error. REA remains a future option for a non-browser deployment. |
+| 15 | Demo and verification | Demo URL and verification scripts. Pipeline and browser counts retain their measured context. |
 
-**rhythm 曲线**：peak(01) → valley(02) → transition(03) → valley(04) → **peak(05)** → transition(06)
-→ valley(07) → **peak(08)** → valley(09) → **peak(10)** → transition(11) → **peak(12)** → valley(13) → peak(14)。
-无连续 ≥ 3 页 valley ✓。
+## Measured claims and limits
 
-**非对称版式预算**：14 页中 12 页用非对称版式（86% ≥ 40%）✓。
-**对称版式预算**：只用 2 页 —— 12（图表+洞察）与 14（居中金句/巨型数字）✓。
-`左大图+右侧文字` 与 `非对称双栏` 合计 4 页（07、04、10、13）= 28.6% ≤ 40% ✓。
-`N卡片横排` 0 次 ✓。相邻页版式无重复 ✓。
+The rule baseline uses the same scoring path in the browser and `scripts/verify_triage.mjs`. It misses `case-xid48-dbe`, `case-xid94-rising` and `case-gpu-hang-deadlock`. F8 requires both classification and `should_rma` to match the expected result.
 
-## ③ 页面大纲
+The knowledge base contains 24 Xid entries, 27 failure signatures and 6 diagnostic principles. The app registers 10 tools, exposes 6 for case triage and all 10 for patrol. The recorded 17-call patrol and earlier 31/31 browser check describe individual runs. The offline pipeline check reports 81/81. They do not guarantee latency, cost or future model behavior.
 
-| # | title | type | role | rhythm | layout | visual | visual_role | density | anti_pattern | description |
-| :- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
-| 01 | Training Failure Triage | cover | hero | peak | 全幅图+骑线文字 | 抽象几何：暗底 + 网格 + 巨型数字「11 / 14」 | anchor | 字数约 40 / 图 0 张 / 留白约 42% | 禁止放 AI 生成的氛围插图；禁止标题居中叠在装饰贴片上 | 一句话定位：把一段训练失败的现场，变成带证据链的判断——并回答「这是代码的锅，还是该换卡」。**判断**：这个问题难的不是识别报错，是判方向 |
-| 02 | Three chapters | catalog | supporting | valley | 左标题+右内容 | L3 角标 | evidence | 字数约 150 / 图 0 张 / 留白约 30% | 禁止四卡片预览；禁止把章节说明写成正文段落 | 三章：问题（方向搞反比漏报贵）、我们做了什么（能走完值班的 Agent）、证据与边界（可复现的对照）。**判断**：每一章都以一个可当场核实的数字收束 |
-| 03 | Chapter 01 · The problem | section | transition | transition | 全幅图+骑线文字 | 背景网格 + 巨大「94」 | atmosphere | 字数约 34 / 图 0 张 / 留白约 55% | 禁止铺满正文段落；禁止四宫格预览 | 引出第 1 章。**判断**：误判有两个方向，两个方向的代价都是钱和算力 |
-| 04 | One code, two opposite mistakes | content | supporting | valley | 非对称双栏 60:40 | Diagram(双向误判对照) | evidence | 字数约 230 / 图 1 张 / 留白约 28% | 禁止 50:50 等分双栏；禁止两张卡片等宽横排 | 把应用 bug 当硬件故障 → 好卡下线走 RMA；把硬件劣化当偶发 → 等 Xid 95 才追悔。**判断**：这两种误判用同一个错误码就能触发，所以判据不能是码本身 |
-| 05 | Same code. Opposite conclusions. | content | hero | peak | 巨型数字+洞察 | L1: crop-node-lyg2103.png + crop-node-lyg2112.png（两行各裁一行、上下摆开，中间注明省略了哪两行） | anchor | 字数约 190 / 图 1 张 / 留白约 35% | 禁止等宽卡片横排；禁止把两个结论塞进同一个色块；禁止用角标顶替主视觉 | lyg2103 近 30 天 1 次、ECC 平稳 → hardware_watch，不报修；lyg2112 近 30 天 53 次、可纠正 ECC 118 且上升 → 报修。**判断**：判别依据从来不是错误码本身，是趋势 |
-| 06 | Chapter 02 · What we built | section | transition | transition | 全幅图+骑线文字 | 背景网格 + 巨大「13」 | atmosphere | 字数约 36 / 图 0 张 / 留白约 55% | 禁止铺满正文段落；禁止四宫格预览 | 引出第 2 章。**判断**：13 轮工具调用是一整段值班的最小代价，所以轮次上限必须留够 |
-| 07 | Nobody pasted a log | content | supporting | valley | 左大图+右侧文字 | L1: crop-cluster-card.png（集群状态整卡，占左 58%） | anchor | 字数约 250 / 图 1 张 / 留白约 25% | 禁止把整页截图缩小成缩略图；禁止在标题块右侧塞装饰小图 | 界面显示「6 个节点，其中 4 个存在异常现象 · 数据来自 Cloud Firestore（实时读取）」。**判断**：主动的含义是没人贴日志它也能开工，而「实时读取」这四个字是可验证的 |
-| 08 | Execution is real | content | hero | peak | 上大图+下方卡片 | L1: crop-oplog.png（操作日志整卡：2 条 · 回验通过） | anchor | 字数约 210 / 图 1 张 / 留白约 30% | 禁止把「回验通过」缩到看不清；禁止用图标代替真实日志行 | 操作日志 2 条，两条都是「回验通过」；lyg2112 的 cordoned 从 false 变成 true，可在 Firebase 控制台刷新确认。**判断**：执行后回读是「真的做了」与「界面动画」之间唯一的分界线 |
-| 09 | Risk does not come from the model | content | supporting | valley | 左标题+右内容 | L1: crop-risks.png（三级风险与审批要求整块） | evidence | 字数约 260 / 图 1 张 / 留白约 26% | 禁止把 14 条动作做成等宽四卡；禁止用图标堆代替风险规则文字 | 14 条动作（6 低 / 5 中 / 3 高）+ 1 条标记「不建议」；`execute_action` 只放行低风险，白名单让模型连 `risk` 字段都传不进来。**判断**：门槛写在代码里而不是提示词里——提示词是可以被说服的 |
-| 10 | The evidence chain is the product | content | hero | peak | 非对称双栏 65:35 | L1: crop-tooltrace.png（AI 工具调用轨迹，占左 65%） | anchor | 字数约 240 / 图 1 张 / 留白约 27% | 禁止把工具轨迹写成一段叙述；禁止把截图裁到看不见工具名与参数 | 一次分诊 4 次调用（lookup_xid 94 / lookup_xid 95 / inspect_node lyg2103 / propose_fix），结论 hardware + 报修、置信度 95%，与案例期望一致。**判断**：每条结论都带 T 编号可指回产生它的那次调用，所以「AI 编了个数」在结构上不可能 |
-| 11 | Chapter 03 · Evidence & boundaries | section | transition | transition | 全幅图+骑线文字 | 背景网格 + 巨大「11 / 14」 | atmosphere | 字数约 34 / 图 0 张 / 留白约 55% | 禁止铺满正文段落；禁止四宫格预览 | 引出第 3 章。**判断**：一个可以被当场证伪的数字，比一句「准确率很高」可信得多 |
-| 12 | 11 / 14 — and you can rerun it | content | hero | peak | 图表+洞察 | Chart(逐案例对照：期望 vs 规则 vs AI) + L1: crop-bench-table.png | anchor | 字数约 200 / 图 2 张 / 留白约 22% | 禁止把 11/14 做成普通条形图；禁止用 AI 分诊的数字充数（未跑满就是空） | 规则基线 11/14（78.6%），错的三题是 xid48-dbe、xid94-rising、gpu-hang-deadlock，各对应一条诊断原则。**判断**：这个数字在浏览器里点一下就出来，跑的是同一份代码 |
-| 13 | Five layers, one rule | content | supporting | valley | 非对称双栏 62:38 | Diagram(五层架构 + 工具调用循环) | evidence | 字数约 270 / 图 1 张 / 留白约 24% | 禁止把架构画成平铺线性列表；禁止把命令与代码截图当装饰 | 知识库（24 Xid / 27 特征 / 6 原则）→ 预分析 → 工具（按模式裁剪 6/10）→ 模型循环（12 轮 + 续跑）→ 执行层（只放行低风险 + 回验）。**判断**：一件事同时写在提示词和代码里，但最终生效的是代码 |
-| 14 | It has already been acted on | ending | hero | peak | 居中金句/巨型数字 | L3 角标 + 巨型金句 | anchor | 字数约 30 / 图 0 张 / 留白约 50% | 禁止再放一屏功能列表；禁止结尾塞致谢大段文字 | 收束金句：把一段训练失败的现场，变成带证据链的判断——而且是**已经被处置过的那一个**。落款：线上链接 + 仓库 + 三个可重跑验收脚本 |
+The cluster contains simulated data and has no production-cluster connection. Patrol starts with a human click. Tickets remain drafts until operator submission. Notifications remain queued without an external delivery integration. Medium and high risk actions require human approval.
 
-## 数据落点自检
+REA is not included in this build. The browser application produces snapshot and live evidence only. A future CLI or server deployment could evaluate rea-agents for local artifact inspection.
 
-| 页面 | 数字 | 跟上的一句判断 |
-| :- | :--- | :--- |
-| 05 | 1 次 vs 53 次 / ECC 118 | 判据不是错误码，是趋势——所以查表注定判错 |
-| 06 | 13 轮 | 轮次上限留不够就会截断，代价是换模型重跑并多扫一次集群 |
-| 08 | 2 条日志 · 2 次回验通过 | 回读是「真的做了」与「界面动画」之间唯一的分界线 |
-| 09 | 6 低 / 5 中 / 3 高 | 门槛在代码里，因为提示词可以被说服 |
-| 10 | 4 次调用 · 置信度 95% | 每条结论带 T 编号，编数字在结构上不可能 |
-| 12 | 11 / 14 | 可当场复现的对照，比自我宣称的准确率可信 |
+## Screenshot provenance
+
+The English refresh captures the actual browser application locally. It intercepts external requests with deterministic local response fixtures. `clean` contains the unmodified seed and no operation records. `shift` contains two cordon records and an English triage replay. The capture makes no live model request or external state change. The replay demonstrates current English UI rendering, not a new model accuracy measurement.
+
+All screenshot crops use geometry collected in their capture session. The deck retains real rendered screenshots and the existing crop pipeline. Slide 5 identifies the two omitted intervening rows so it does not imply adjacency in the source list.

@@ -1,154 +1,87 @@
-# DESIGN.md — Training Failure Triage（方案说明 deck）
+# Training Failure Triage deck design
 
-> 通用设计原则路线（**非**学术/咨询/政务任何预设分支）：受众是 JAPAC 技术评审，
-> 场合是技术方案评审，调性偏工程纪实。故不与任何预设风格比对命中，走 universal-only 原创设计稿。
+This refresh preserves the supplied 15-page design and the repository's `.slide` authoring pipeline. The audience is the AI Builder Cup 2026 JAPAC technical review panel.
 
-## 1. 画布与母版（三区，具体 px）
+## Canvas and repeated elements
 
-画布 **1280 × 720**。
+The authoring canvas is 1280 x 720. Final slide renders are 1920 x 1080.
 
-| 母版区 | 垂直位置 | 高度 | 内容规则 |
-| :--- | :--- | :--- | :--- |
-| **A · 标题块** | 0–110px | 110px（含上 padding 18） | 主标题 34px bold，左对齐，x 起点 72px；右侧可放一行 14px 灰字「章节 / 证据标签」，**禁止放任何图片** |
-| **B · 内容区** | 110–654px | 544px 可用 | 一切正文、卡片、图表、截图；禁止挤占 A/C 区 |
-| **C · 页脚条** | 654–720px | 66px（含下 padding 18） | 左侧 14px 灰字 `Training Failure Triage · AI Builder Cup 2026`；右侧页码 `NN / 14`，14px 灰字，x 终点 1208px |
-| 页面 padding | 上下 18px、左右 72px | — | A/B/C 均在 padding 之内排布 |
+| Region | Position | Design |
+| --- | --- | --- |
+| Title | y 18-110, x 72-1208 | 34px bold title, optional 14px evidence label on the right |
+| Content | y 110-654 | Existing screenshots, comparison diagrams and text |
+| Footer | y 654-702 | 14px project attribution or source note, page number at right |
 
-- 第 01 / 03 / 06 / 11 / 14 页（封面、三个章节扉页、结束页）采用**自定义满幅版式**，
-  省略 C 区页码、A 区固定结构；其中 03 / 06 / 11 / 14 保留右下角 `NN / 14` 的极简页码。
-- 第 02 / 04 / 05 / 07 / 08 / 09 / 10 / 12 / 13 页严格复用三区母版，**标题位置与页码位置逐页一致**。
+Pages 1, 3, 6, 11 and 15 retain the full dark canvas with a subtle grid. Pages 3, 6, 11 and 15 retain their minimal bottom-right page number. The remaining pages use the existing white content layout and 72px side margins.
 
-## 2. 颜色系统
+## Color and typography
 
-**色彩池（4 个彩色 hex，另有 3 个中性 hex）**
+| Role | Value |
+| --- | --- |
+| Ink and dark background | `#0B1220` |
+| Blue | `#2F6BFF` |
+| Red | `#E5484D` |
+| Green | `#16B981` |
+| Light panel | `#F1F4FA` |
+| Body | `#1A2434` |
+| Secondary text | `#64748B` |
 
-| 角色 | hex | 用途 |
-| :--- | :--- | :--- |
-| **主色 ink** | `#0B1220` | 封面/章节扉页/结束页的满幅底色；浅色页上的标题文字与大色块 |
-| **辅色 blue** | `#2F6BFF` | 主题蓝：卡片头、图表第一系列、结构线、结论正确侧 |
-| **强调色 red** | `#E5484D` | **只用于不可逆/报修/判错方向**——全篇出现 ≤ 6 处 |
-| **强调色 green** | `#16B981` | **只用于「已回验通过」与「不该报修」**——全篇出现 ≤ 6 处 |
-| 中性 1 | `#FFFFFF` | 浅色页底、卡片底 |
-| 中性 2 | `#F1F4FA` | 浅色页上的次级面板、表格斑马纹 |
-| 中性 3 | `#1A2434` / `#64748B` | 深底上的正文 / 浅底上的次要文字与分隔线 |
+The dark background keeps the original gradient through `#131E33`. Existing risk indicators also retain amber. Red indicates repair/escalation or risk. Green indicates monitoring without RMA or a successful verification result.
 
-> 只有 4 个彩色 hex，符合「≤ 4 hex」。中性色不计入彩色池。
+The source font stacks remain `Inter, "Helvetica Neue", Arial, sans-serif` for prose and `"JetBrains Mono", "SF Mono", Menlo, monospace` for data and code. The existing rendered export uses its available font fallback. Main content titles stay at 34px, section titles at 64px and the cover at 76px. Large data remains 104px or larger. Body copy uses the template's 14-20px sizes.
 
-### 2.1 色彩面积分配（逐页声明见 §6 页面映射表）
+## Visual evidence
 
-| 色彩角色 | 面积占比上限 | 说明 |
-| :--- | :--- | :--- |
-| 主色 | ≤ 60% | 满幅深底页（01/03/06/11/14）实际约 88% 深底；浅色页约 8% |
-| 辅色 | ≤ 30% | 卡片头、结构线、图表系列 |
-| 强调色 | ≤ 10% | Hero 页可到 15–20%；supporting 页 ≤ 5% |
-| 中性色 | 剩余 | 文本、页脚、边框 |
+Screenshots come from the actual English application rendered in Chrome. No UI illustration or drawn replacement substitutes for the screenshots. Captures use a 1440 x 900 CSS viewport at device scale 2. Their full document height varies by tab.
 
-**色彩节奏**：01/03/06/11/14 是「深底爆发页」（主色 ≈ 88%，强调色 15%+）；
-02/04/09/13 是「浅底密集页」（白底，辅助色 ≤ 20%，强调色 ≤ 5%）；
-05/08/10/12 是「数据高潮页」（浅底 + 大色块，强调色 15%）。
-三组比例显著不同 ✓
+The refresh uses a local response replay because the deployed application shares mutable simulated Firestore state. `clean` replays the unmodified six-node seed with no events. `shift` replays two cordon outcomes and an English triage fixture. No live Gemini call, Firestore reset, or external write occurs during capture. Captions identify this mode. Historical measurements retain their original run context.
 
-### 2.2 渐变与半透明
+Each group's `boxes.json` records element bounds during the same session as its screenshots. `make_crops.py` reads those bounds and each slide's image dimensions. It expands the crop to the required ratio without removing evidence and exports at twice the image frame size.
 
-- **深底页背景**：`linear-gradient(160deg, #0B1220 0%, #131E33 62%, #0B1220 100%)`
-  用于 01 / 03 / 06 / 11 / 14 的满幅底。
-- **卡片浮起感**：`boxShadow: '0 4px 20px rgba(11,18,32,0.08)'`，仅用于浅底页的白卡。
-- **截图蒙版**：截图一律**不加蒙版、不压暗**——这份 deck 的论点是「你看真的东西」，
-  任何减淡都是反效果。截图只允许加 `1px solid #F1F4FA` 的描边使其从白底里立起来。
-- **半透明**：深底页上的次级面板用 `rgba(255,255,255,0.06)`，结构线用 `rgba(255,255,255,0.12)`。
+| Asset | Source | Slide |
+| --- | --- | --- |
+| `crop-node-lyg2103.png` | clean patrol row 2 | 5 |
+| `crop-node-lyg2112.png` | clean patrol row 5 | 5 |
+| `crop-cluster-card.png` | clean patrol cluster panel | 7 |
+| `crop-oplog.png` | shift patrol operation-log panel | 8 |
+| `crop-risks.png` | clean actions risk panel | 9 |
+| `crop-tooltrace.png` | shift triage tool trace | 10 |
+| `crop-bench-table.png` | clean benchmark, all 14 rows | 12 |
 
-## 3. 字体系统
+Slide 5 retains separate node-row crops and names the two intervening rows omitted from the original list. Screenshots keep their aspect ratio and original UI colors.
 
-**字体家族（2 套）**
+## Page layouts
 
-| 家族 | 声明 | 用途 |
-| :--- | :--- | :--- |
-| A · 标题与正文 | `Inter, "Helvetica Neue", Arial, sans-serif` | 全部标题、正文、卡片文字 |
-| B · 数据与代码 | `"JetBrains Mono", "SF Mono", Menlo, monospace` | 巨型数字、工具名（`inspect_node`）、字段名、命令、页码 |
+| Page | Subject | Preserved layout |
+| --- | --- | --- |
+| 1 | Training Failure Triage | Dark cover, grid and large 11/14 |
+| 2 | Submission overview | Intro at left, three chapter rows at right |
+| 3 | The problem | Dark section page, large 94 |
+| 4 | Xid 94 escalation errors | Asymmetric comparison diagram and explanation |
+| 5 | Xid 94 frequency and ECC trends | Large counts above two full-width node crops |
+| 6 | Application workflow | Dark section page, historical 17-call measurement |
+| 7 | Cluster inspection | Cluster screenshot at left, three readings at right |
+| 8 | Action verification | Operation-log screenshot above the 2/2 result |
+| 9 | Action risk and approval | Risk rows and code gate above the UI crop |
+| 10 | Triage tool trace | Recommendation summary, full trace and explanation |
+| 11 | Evidence and limits | Dark section page, large 11/14 |
+| 12 | Rule benchmark results | Large score and misses at left, full table at right |
+| 13 | Application architecture | Five vertical layers and responsibilities at right |
+| 14 | Evidence support and REA | Three evidence rows above two explanatory columns |
+| 15 | Demo and verification | Dark centered close with demo and script references |
 
-### 3.1 字号层级
+## Content rules
 
-| 层级 | 字号 | 字重 | 行高 | 用途 |
-| :--- | :--- | :--- | :--- | :--- |
-| 封面主标题 | 76px | 700 | 1.08 | 仅第 01 页 |
-| 章节大字 | 64px | 700 | 1.10 | 03 / 06 / 11 扉页 |
-| 结束金句 | 52px | 600 | 1.25 | 仅第 14 页 |
-| **巨型锚点数字** | **104px** | 700 | 1.00 | 05（1 vs 53）、08（2 / 2）、12（11 / 14）；家族 B |
-| 页面主标题（A 区） | 34px | 700 | 1.30 | 全部内容页，位置固定 |
-| 卡片小标题 | 22px | 600 | 1.40 | 卡片头 |
-| 正文 | 18px | 400 | 1.62 | 段落、列表 |
-| 小字 / 标签 | 14px | 400 | 1.45 | 页脚、证据标签、表格 |
-| 代码 / 工具名 | 15px | 500 | 1.55 | 家族 B |
+Titles name the subject. Copy uses concise English without slogans, em dashes, semicolons, dot separators, vertical bars, personification or unsupported guarantees. Keep exact tool names, fields and case IDs.
 
-### 3.2 字体个性
+F8 is the joint classification/RMA score of 11/14 (78.6%) on 14 constructed cases. Classification alone is 11/14 and RMA alone is 12/14. The deck does not report an aggregate AI score or claim production accuracy.
 
-- 标题与正文同族（Inter）但**字重跳档**：标题 700 / 正文 400，不靠字号差硬撑。
-- **巨型数字与正文必须不同家族**（家族 B 等宽），这是全篇最强的视觉签名：
-  等宽让 `11 / 14`、`1 → 53` 这类数字自带「日志/终端」的气质，与产品本身（命令行运维）同源。
+Slide 14 preserves the disabled `artifact` row in neutral gray and states the deployment boundary explicitly:
 
-## 4. 信息密度与留白
+REA is not included in this build. The browser application produces snapshot and live evidence only. A future CLI or server deployment could evaluate rea-agents for local artifact inspection.
 
-- **留白上限**：常规内容页 ≤ 35%。深底扉页与封面允许 40–55%（围绕焦点元素的集中留白）。
-- **单主题内容页**：正文 ≥ 180 字、主视觉占 B 区 ≥ 30%。
-- **容器填充率 ≥ 85%**：卡片高 ≥ 380px 时正文 ≥ 100 字；尾部元素用 `justifyContent: 'space-between'` 钉底。
-- **焦点留白**：巨型数字四周 ≥ 40px。
-- **禁止均匀稀薄**：每页留白必须围绕视觉锚点聚集。
+## Generation and review
 
-## 5. 配图系统
+Use the existing capture, crop, slidep and PDF scripts. Keep sources editable. Build candidate exports in a private directory before copying validated artifacts to `deck/Training-Failure-Triage.pptx` and `docs/Training-Failure-Triage-deck.pdf`.
 
-**★ 本项目刻意不用 ImageGen 生成任何插图。** 理由需要写清楚，因为这偏离了常规做法：
-
-这份 deck 的核心论点是「**你看真的东西**」——工具调用轨迹、操作日志的回验结果、可复现的 11/14。
-放一张 AI 生成的「数据中心氛围图」会立刻把整份材料拉回「包装」的语气。
-所以配图只分三类：**真实产品截图（evidence）**、**结构化 SVG 图示（evidence）**、
-**抽象几何背景（atmosphere，仅用于满幅深底页）**。三者在 DESIGN.md 显式声明为刻意选择。
-
-| 等级 | 本项目用法 | 位置 | 最小尺寸 |
-| :--- | :--- | :--- | :--- |
-| **L1 · 主视觉** | 真实产品截图（裁切，宽度按面板实宽） | 05（两张节点行裁切）、07（集群状态整卡）、08（操作日志整卡）、09（三级风险与审批整块）、10（工具调用轨迹）、12（逐案例基准表） | 宽 ≥ 659，高 116–422（**高度由裁切对象决定，不设下限**）：单栏改版后每一块都是「宽而扁」的面板条，硬凑到统一高度只能靠补底色，把画面撑松且不增加任何信息 |
-| **L1 · 主视觉（抽象）** | SVG 网格 + 巨型数字/图示 | 01 / 03 / 06 / 11 / 14（背景）、04 / 13（对照与架构图） | 满幅或占一栏 ≥ 55% |
-| **L3 · 母版徽标** | 右下角 14px 等宽 `NN / 14` + 左下角署名条 | 全部内容页；深底页用 `rgba(255,255,255,0.45)` | 全篇位置严格一致 |
-
-**截图素材清单（`assets/`，全部由 `make_crops.py` 重出）**
-
-| 文件 | 源（仓库根 `shots/`） | 画的是什么 | 用于 |
-| :--- | :--- | :--- | :--- |
-| `crop-node-lyg2103.png` | `clean/live-02-patrol.png` 第 0 行 | lyg2103：Xid 94 单次 · ECC 平稳 | 05（上方一行） |
-| `crop-node-lyg2112.png` | `clean/live-02-patrol.png` 第 3 行 | lyg2112：Xid 94 累计 53 · 可纠正 ECC 118 上升 | 05（下方一行） |
-| `crop-cluster-card.png` | `clean/live-02-patrol.png` | 集群状态整卡（刚重置：6 节点 · 4 个有色标记 · 无一 cordon） | 07（左 58%） |
-| `crop-oplog.png` | `shift/live-02-patrol.png` | 操作日志整卡（跑完一次值班：2 条，各带「回验通过」） | 08（上大图） |
-| `crop-risks.png` | `clean/live-04-actions.png` | 三级风险与审批要求整块（6 低 / 5 中 / 3 高） | 09 |
-| `crop-tooltrace.png` | `shift/live-01-triage.png` | AI 工具调用轨迹（4 次调用与参数原样展示） | 10（左 65%） |
-| `crop-bench-table.png` | `clean/live-03-benchmark.png` | 逐案例对照表（表头 + 14 行，3 行红底「错」，AI 列有「未跑」） | 12（右栏） |
-
-> `crop-node-lyg2103` 与 `crop-node-lyg2112` 在 05 上是**上下摆开**的，中间写明了省略掉的两行
-> （lyg2107 / lyg2108）——节点列表里这两行并不相邻，拼成相邻的两行等于拿画面造一个不存在的关系。
->
-> 整页截图由 `scripts/capture_shots.mjs <url> shots/<组> --boxes shots/<组>/boxes.json` 采，
-> 裁切由 `make_crops.py` 做。**裁哪一块不手写坐标**：几何从 `boxes.json` 读（截图那一次会话里量的），
-> 图多大从 `slides/*.slide` 里 `<Image>` 的框读。分两组是因为同一时刻界面只有一个状态：
-> `clean/`（刚重置 —— 集群整卡、节点行、风险块、基准表要的是这个）
-> 与 `shift/`（跑完一次值班 —— 操作日志才非空，单次分诊才真跑过模型）。
-> 拿巡检后的状态去配「页面加载时的样子」，图与话就对不上了。
-> 素材是 2 倍像素密度、按图片框尺寸缩放着色，所以投影上不会糊。
-
-## 6. 页面映射表
-
-| # | 文件 | 类型 | 角色 | rhythm | 版式 | L1 | 字数 | 留白% | 色彩分配 | 关键约束 |
-| :- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
-| 01 | 01.slide | cover | hero | peak | 全幅图+骑线文字 | 抽象网格 + 巨型 `11 / 14` | 40 | 42% | 主色 88% + 强调 blue 8% | 无 C 区；标题左骑入，底行放域名与赛道 |
-| 02 | 02.slide | catalog | supporting | valley | 左标题+右内容 | L3 | 150 | 30% | 中性 70% + 辅色 20% | 三章编号 01..03 与扉页逐字一致 |
-| 03 | 03.slide | section | transition | transition | 全幅图+骑线文字 | 网格 + 巨大「94」 | 34 | 55% | 主色 88% + red 10% | 章节号 01；标题与目录条目逐字一致 |
-| 04 | 04.slide | content | supporting | valley | 非对称双栏 60:40 | Diagram 双向误判 | 230 | 28% | 中性 62% + 辅色 26% + red 6% | 60:40 不等分；红绿各出现 1 次 |
-| 05 | 05.slide | content | hero | peak | 巨型数字+洞察 | `crop-node-lyg2103.png` + `crop-node-lyg2112.png` | 190 | 35% | 中性 55% + 辅色 20% + 强调 18% | 巨型数字家族 B 104px；红/绿各 1 处；两行之间必须写明省略了哪两行 |
-| 06 | 06.slide | section | transition | transition | 全幅图+骑线文字 | 网格 + 巨大「13」 | 36 | 55% | 主色 88% + blue 10% | 章节号 02 |
-| 07 | 07.slide | content | supporting | valley | 左大图+右侧文字 | `crop-cluster-card.png` 左 58% | 250 | 25% | 中性 60% + 辅色 22% | 截图不得缩成缩略图；右侧三行读数 |
-| 08 | 08.slide | content | hero | peak | 上大图+下方卡片 | `crop-oplog.png` | 210 | 30% | 中性 52% + 辅色 18% + green 16% | green 只用于「回验通过」；巨型数字 `2 / 2` |
-| 09 | 09.slide | content | supporting | valley | 左标题+右内容 | `crop-risks.png` | 260 | 26% | 中性 64% + 辅色 24% + 强调 5% | 三级风险用三行而非等宽三卡；裁切要连面板标题一起裁，别把标题切一半 |
-| 10 | 10.slide | content | hero | peak | 非对称双栏 65:35 | `crop-tooltrace.png` 左 65% | 240 | 27% | 中性 50% + 辅色 22% + 强调 16% | 截图必须能看清 `lookup_xid` / `inspect_node` 与参数 |
-| 11 | 11.slide | section | transition | transition | 全幅图+骑线文字 | 网格 + 巨大 `11 / 14` | 34 | 55% | 主色 88% + blue 10% | 章节号 03 |
-| 12 | 12.slide | content | hero | peak | 图表+洞察（**对称**） | Chart 逐案例对照 + `crop-bench-table.png` | 200 | 22% | 中性 58% + 辅色 20% + red 12% | 巨型 `11 / 14`；AI 列必须显示「未跑」而不是编数字 |
-| 13 | 13.slide | content | supporting | valley | 非对称双栏 62:38 | Diagram 五层 + 工具循环 | 270 | 24% | 中性 66% + 辅色 26% | 五层必须画成纵向堆叠而非平铺列表 |
-| 14 | 14.slide | ending | hero | peak | 居中金句/巨型数字（**对称**） | L3 | 30 | 50% | 主色 88% + blue 8% | 不打致谢长文；放线上链接与三个验收脚本 |
-
-> 对称版式仅 12 / 14 两页 ✓；`N卡片横排` 0 次 ✓；相邻页版式无重复 ✓。
+Review all 15 individual 1920 x 1080 slide renders against the supplied design. Check text fit, screenshot legibility, metric labels and the unsupported artifact tier. Render the final PDF with Poppler and verify all 15 pages.

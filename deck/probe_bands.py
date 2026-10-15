@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""在截图的指定矩形内，按「有内容的行」聚类出文本/表格行带，用于精确定位裁切区间。
-用法: probe_bands.py <png> <x0> <y0> <x1> <y1> [min_ink]   —— 坐标均为 CSS px（= device/2）
-"""
+"""Group nonblank screenshot rows into bands for crop measurement.
+Usage: probe_bands.py <png> <x0> <y0> <x1> <y1> [min_ink]
+Coordinates use CSS pixels (device pixels divided by two)."""
 import sys
 from PIL import Image
 
@@ -15,7 +15,7 @@ def bands(path, box, min_ink=6, gap=4):
         n = 0
         for x in range(x0, x1, 2):
             c = px[x, y]
-            # 非白且非浅底 → 视为「墨」
+
             if c[0] < 236 or c[1] < 236 or c[2] < 236:
                 n += 1
         rows.append(n)

@@ -1,14 +1,9 @@
 #!/usr/bin/env python3
-"""验证 AI Logic 的「工具调用」与「思考预算」两个关键点。
+"""Probe AI Logic tool calls and thinking-budget support.
 
-背景（2026-10-14 实测）：
-  - 端点鉴权**必须用 header** `x-goog-api-key`；用 `?key=` 会被边缘直接 400。
-  - gemini-3.8-flash 是思考模型：thoughtsTokenCount 会吃掉 maxOutputTokens，
-    给 64 会直接 MAX_TOKENS 且 content 为空 —— 必须给足，否则看不到任何输出。
-  - 返回里带 thoughtSignature，思考模型的工具调用需要回传该字段。
-
-用法：python3 scripts/probe_ailogic.py
-"""
+Use x-goog-api-key authentication and preserve thoughtSignature in tool round trips.
+Thinking tokens count against maxOutputTokens.
+Usage: python3 scripts/probes/probe_ailogic.py"""
 
 from __future__ import annotations
 
@@ -54,7 +49,7 @@ TOOLS = [
 ]
 
 CASES = {
-    "A. 工具调用（maxOutputTokens=2048）": {
+    "A. Tool calls (maxOutputTokens=2048)": {
         "contents": [
             {
                 "role": "user",
@@ -69,7 +64,7 @@ CASES = {
         "tools": TOOLS,
         "generationConfig": {"temperature": 0.2, "maxOutputTokens": 2048},
     },
-    "B. 关思考（thinkingBudget=0）": {
+    "B. Thinking disabled (thinkingBudget=0)": {
         "contents": [{"role": "user", "parts": [{"text": "只回复两个字：收到"}]}],
         "generationConfig": {
             "temperature": 0,
@@ -97,30 +92,30 @@ def run(label: str, payload: dict) -> None:
         dt = time.time() - t0
         cands = data.get("candidates") or []
         usage = data.get("usageMetadata") or {}
-        print(f"HTTP 200  耗时 {dt:.1f}s  思考token={usage.get('thoughtsTokenCount', 0)}  "
-              f"输出token={usage.get('candidatesTokenCount', 0)}")
+        print(f"HTTP 200  elapsed {dt:.1f}s  thinking tokens={usage.get('thoughtsTokenCount', 0)}  "
+              f"output tokens={usage.get('candidatesTokenCount', 0)}")
         if not cands:
-            print("!! 无 candidates:", json.dumps(data, ensure_ascii=False)[:400])
+            print("!! No candidates:", json.dumps(data, ensure_ascii=False)[:400])
             return
         c0 = cands[0]
         parts = (c0.get("content") or {}).get("parts") or []
         calls = [p["functionCall"] for p in parts if p.get("functionCall")]
         texts = [p.get("text", "") for p in parts if p.get("text")]
         if calls:
-            print(f"✅ 工具调用成功，共 {len(calls)} 次：")
+            print(f"Tool calls succeeded: {len(calls)} calls:")
             for c in calls:
                 print("   -", c.get("name"), json.dumps(c.get("args"), ensure_ascii=False))
             has_sig = any(p.get("thoughtSignature") for p in parts)
-            print("   带 thoughtSignature:", has_sig)
+            print("   Includes thoughtSignature:", has_sig)
         elif texts:
-            print("   文本回复:", "".join(texts)[:120])
+            print("   Text response:", "".join(texts)[:120])
         else:
-            print("   ⚠️ 既无 functionCall 也无 text；finishReason =", c0.get("finishReason"))
+            print("   Warning: No functionCall or text; finishReason =", c0.get("finishReason"))
     except urllib.error.HTTPError as exc:
-        print(f"HTTP {exc.code}  耗时 {time.time() - t0:.1f}s")
+        print(f"HTTP {exc.code}  elapsed {time.time() - t0:.1f}s")
         print(exc.read().decode("utf-8", "replace")[:700])
     except Exception as exc:  # noqa: BLE001
-        print(f"!! {type(exc).__name__}: {exc}  耗时 {time.time() - t0:.1f}s")
+        print(f"!! {type(exc).__name__}: {exc}  elapsed {time.time() - t0:.1f}s")
 
 
 if __name__ == "__main__":

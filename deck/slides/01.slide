@@ -1,4 +1,4 @@
-// 01 · 封面 —— 深底 + 网格 + 骑线巨型数字
+// 01: cover, preserving the supplied dark grid and large score.
 const FONT = 'Inter, "Helvetica Neue", Arial, sans-serif';
 const MONO = '"JetBrains Mono", "SF Mono", Menlo, monospace';
 const BLUE = '#2F6BFF';
@@ -7,7 +7,7 @@ const DEEP = 'linear-gradient(160deg, #0B1220 0%, #131E33 62%, #0B1220 100%)';
 const GRID_X = [0, 71, 142, 213, 284, 355, 426, 497, 568, 639, 710, 781, 852, 923, 994, 1065, 1136];
 const GRID_Y = [0, 64, 128, 192, 256, 320, 384, 448, 512, 576];
 
-const STEPS = ['Detect', 'Collect evidence', 'Diagnose & plan', 'Act · notify · verify'];
+const STEPS = ['Detection', 'Evidence collection', 'Diagnosis and plan', 'Action and verification'];
 
 <Slide style={{ width: 1280, height: 720, padding: '72px', background: DEEP, fontFamily: FONT }}>
     <Box style={{ position: 'relative', width: 1136, height: 576 }}>
@@ -29,12 +29,12 @@ const STEPS = ['Detect', 'Collect evidence', 'Diagnose & plan', 'Act · notify �
         </Box>
 
         <Box style={{ position: 'relative', width: 790, height: 576, justifyContent: 'center', gap: 22 }}>
-            <Text style={{ fontFamily: MONO, fontSize: 14, color: BLUE, letterSpacing: 3 }}>AI BUILDER CUP 2026 · JAPAC</Text>
+            <Text style={{ fontFamily: MONO, fontSize: 14, color: BLUE, letterSpacing: 3 }}>AI BUILDER CUP 2026, JAPAC</Text>
             <Text style={{ fontSize: 76, fontWeight: 700, color: '#FFFFFF', lineHeight: 1.08 }}>Training Failure</Text>
             <Text style={{ fontSize: 76, fontWeight: 700, color: '#FFFFFF', lineHeight: 1.08 }}>Triage</Text>
             <Box style={{ width: 96, height: 3, background: BLUE, marginTop: 10 }} />
             <Text style={{ fontSize: 20, color: '#94A3B8', lineHeight: 1.62, width: 720 }}>
-                A training job fails. The task is to decide <span style={{ color: '#E2E8F0' }}>whether the fault is in the software or in the card</span>, and to show the evidence the decision rests on.
+                Evidence for deciding <span style={{ color: '#E2E8F0' }}>whether a training failure comes from software or GPU hardware</span>, with risk controls for the proposed action.
             </Text>
             <Box style={{ flexDirection: 'row', gap: 10, marginTop: 12 }}>
                 {STEPS.map((s, i) => (
@@ -44,7 +44,7 @@ const STEPS = ['Detect', 'Collect evidence', 'Diagnose & plan', 'Act · notify �
                 ))}
             </Box>
             <Text style={{ fontFamily: MONO, fontSize: 13, color: 'rgba(255,255,255,0.42)', lineHeight: 1.5, width: 720 }}>
-                11 / 14 above = the rule baseline's score on the 14-case library (chapter 03)
+                11 / 14 is the joint classification and RMA rule score on 14 constructed cases
             </Text>
         </Box>
 

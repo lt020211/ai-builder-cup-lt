@@ -1,17 +1,4 @@
-/**
- * 界面装配层。
- *
- * 这一层做三件事，每件都对应一个必须让评委看见的东西：
- *   1. 单次分诊：把「代码算的」「模型判断的」「动作库定级的」三样东西**分开**呈现
- *   2. 值班巡检：把「Agent 真的动了什么手」用操作日志摊开，而不是只给一段总结
- *   3. 基准对照：把「为什么需要模型」变成一个可以自己点一遍验证的数字
- *
- * 一条贯穿全界面的原则：**不让任何东西看起来比它实际更可信**。
- *   · 遥测是快照还是实时，要标出来
- *   · 执行了但回验没通过，要显示为失败
- *   · 降级到规则路径时，要明说没有模型参与
- *   · 模拟集群与生产集群的区别，要写在页面上而不是只写在 README 里
- */
+/* UI orchestration: display evidence, model decisions, catalog risk, and verified simulator state. Label offline results and simulation boundaries. */
 
 import { diagnose, patrol, DEFAULT_MODEL } from './ai.js';
 import { preAnalyze, normalizeEvidence, ruleBasedTriage, compareWithExpected } from './triage.js';
@@ -28,15 +15,18 @@ const esc = (s) =>
 const pct = (v) => `${Math.round(Number(v || 0) * 100)}%`;
 const clock = (iso) => {
   try {
-    return new Date(iso).toLocaleTimeString('zh-CN', { hour12: false });
+    return new Date(iso).toLocaleTimeString('en-US', { hour12: false });
   } catch {
     return iso || '';
   }
 };
 
 // ======================================================================
-// 状态
+// State
 // ======================================================================
+/* Version the output cache to exclude results from older language and schema versions. */
+const CACHE_KEY = 'triage:cache:v3';
+
 const S = {
   cases: [],
   current: null,
@@ -45,22 +35,11 @@ const S = {
   approvals: {},
   ticket: '',
   approver: '',
-  /** AI 结果缓存：演示当天零等待、零配额消耗 */
+  /* AI output cache for repeated case runs. */
   cache: loadCache(),
-  /** 基准表里 AI 那一路的结果，按案例 id 累积 */
+  /* Structured AI decisions accumulated by case ID. */
   benchAi: {},
 };
-
-/**
- * 缓存键里带版本号。
- *
- * ★ 为什么必须带：localStorage 里的东西是上一次**那版代码**产出的对象。
- *   代码改了字段（这次就发生了 —— 老结果里根本没有 tool_calls），
- *   缓存却照旧命中，于是界面用旧形状渲染新界面，你会看到一个
- *   早已修好的 bug 还在原地。**排查时最怕的就是证据本身是旧的。**
- *   改字段就升版本号，老条目自然失效，不用手动去清浏览器存储。
- */
-const CACHE_KEY = 'triage:cache:v2';
 
 function loadCache() {
   try {
@@ -73,7 +52,7 @@ function saveCache() {
   try {
     localStorage.setItem(CACHE_KEY, JSON.stringify(S.cache));
   } catch {
-    /* 无痕模式下写不进去，忽略即可——缓存只是加速，不是功能 */
+    /* Storage may be unavailable; caching is optional. */
   }
 }
 
@@ -83,7 +62,7 @@ function setStatus(sel, text) {
 }
 
 // ======================================================================
-// 标签页
+// Tabs
 // ======================================================================
 function initTabs() {
   $('#tabs').addEventListener('click', (e) => {
@@ -99,11 +78,11 @@ function initTabs() {
 }
 
 // ======================================================================
-// 单次分诊
+// Case triage
 // ======================================================================
 async function loadCases() {
   const res = await fetch('./data/cases.json', { cache: 'no-store' });
-  if (!res.ok) throw new Error(`案例库加载失败 HTTP ${res.status}`);
+  if (!res.ok) throw new Error(`Failed to load cases HTTP ${res.status}`);
   const doc = await res.json();
   S.cases = doc.cases || [];
   const sel = $('#case-select');
@@ -121,6 +100,7 @@ async function runCase({ ignoreCache = false } = {}) {
   if (!c) return;
   const btn = $('#run-case');
   btn.disabled = true;
+  $('#tab-case').dataset.state = 'running';
   S.current = c;
   S.approvals = {};
   S.ticket = '';
@@ -129,7 +109,7 @@ async function runCase({ ignoreCache = false } = {}) {
   const evidence = normalizeEvidence(c);
   S.pre = preAnalyze(evidence);
 
-  // 先把确定性部分画出来：让人不用对着空屏等模型
+  // Render deterministic evidence before waiting for the model.
   renderEvidence(evidence, S.pre);
   renderVerdictFromRule(evidence, S.pre);
   $('#case-result').style.display = 'block';
@@ -137,18 +117,20 @@ async function runCase({ ignoreCache = false } = {}) {
   $('#aitext').textContent = '';
   $('#degradereason').style.display = 'none';
 
-  // 缓存命中就直接用：演示现场最怕的是当场等模型配额
+  // Reuse only results in the current cache namespace.
   const hit = !ignoreCache && S.cache[c.id];
   if (hit) {
     S.result = hit;
     S.result.fromCache = true;
+    noteAiVerdict(c, hit);
     renderAll(c, evidence);
-    setStatus('#case-status', '已使用本地缓存结果（不消耗模型配额）');
+    setStatus('#case-status', 'Using cached result (no model quota used)');
+    $('#tab-case').dataset.state = 'complete';
     btn.disabled = false;
     return;
   }
 
-  setStatus('#case-status', `本地预分析完成，正在等待 ${DEFAULT_MODEL}…`);
+  setStatus('#case-status', `Local pre-analysis complete; waiting for ${DEFAULT_MODEL}…`);
   try {
     const out = await diagnose({
       caseObj: c,
@@ -159,22 +141,24 @@ async function runCase({ ignoreCache = false } = {}) {
     saveCache();
     noteAiVerdict(c, out);
     renderAll(c, evidence);
-    setStatus('#case-status', out.mode === 'gemini' ? '完成' : '完成（已降级）');
+    setStatus('#case-status', out.mode === 'gemini' ? 'Complete' : 'Complete (offline fallback)');
+    $('#tab-case').dataset.state = 'complete';
   } catch (err) {
-    setStatus('#case-status', `失败：${err.message}`);
+    setStatus('#case-status', `Failed: ${err.message}`);
+    $('#tab-case').dataset.state = 'failed';
   } finally {
     btn.disabled = false;
   }
 }
 
-/** 把 AI 结果里可结构化的部分记进基准表。分诊过的案例会自动积累成对照数据。 */
+/* Accumulate structured model decisions for benchmark comparison. */
 function noteAiVerdict(c, out) {
   const v = extractVerdict(out);
   const cmp = v && compareWithExpected({ class: v.class, should_rma: v.should_rma }, c.expected);
   if (cmp) S.benchAi[c.id] = { ...v, ...cmp };
 }
 
-/** ★ 结论只从模型登记的结构化建议里取，不从它的散文里猜。 */
+/* Read conclusions only from registered structured recommendations. */
 function extractVerdict(out) {
   const a = (out?.actions || [])[0];
   if (!a) return null;
@@ -190,19 +174,19 @@ function extractVerdict(out) {
 function renderVerdictFromRule(evidence, pre) {
   const r = ruleBasedTriage(evidence, pre);
   const expected = S.current?.expected;
-  $('#verdict-mode').textContent = '（规则预判，模型结论稍后覆盖）';
+  $('#verdict-mode').textContent = 'Rule baseline; awaiting model decision';
   $('#verdict').className = `verdict ${r.should_rma ? 'rma' : 'norma'}`;
   $('#verdict').innerHTML = `
     <div class="big">
-      <div class="lbl">是否报修</div>
-      <div class="val">${r.should_rma ? '建议报修' : '不建议报修'}</div>
-      <div class="lbl" style="margin-top:8px">规则路径 · 置信度 ${pct(r.confidence)}</div>
+      <div class="lbl">Hardware repair</div>
+      <div class="val">${r.should_rma ? 'Repair recommended' : 'Repair not recommended'}</div>
+      <div class="lbl" style="margin-top:8px">Rule baseline · Confidence ${pct(r.confidence)}</div>
     </div>
     <div class="meta">
-      <div class="row"><span class="k">故障分类</span><span>${esc(r.class)}</span></div>
-      <div class="row"><span class="k">规则依据</span><span class="hint">${esc(r.basis.join('；') || '（无匹配证据）')}</span></div>
-      <div class="row"><span class="k">口径</span><span class="hint">${esc(r.note)}</span></div>
-      ${expected ? `<div class="row"><span class="k">案例期望</span><span class="hint">${esc(expected.class)} · ${expected.should_rma ? '需报修' : '不需报修'}</span></div>` : ''}
+      <div class="row"><span class="k">Classification</span><span>${esc(r.class)}</span></div>
+      <div class="row"><span class="k">Rule evidence</span><span class="hint">${esc(r.basis.join('; ') || '(no matching evidence)')}</span></div>
+      <div class="row"><span class="k">Scope</span><span class="hint">${esc(r.note)}</span></div>
+      ${expected ? `<div class="row"><span class="k">Expected decision</span><span class="hint">${esc(expected.class)} · ${expected.should_rma ? 'Repair' : 'No repair'}</span></div>` : ''}
     </div>`;
 }
 
@@ -217,41 +201,37 @@ function renderAll(c, evidence) {
 }
 
 function renderVerdict(out, v, c) {
-  // ★ 这句话必须由**实际发生的调用次数**决定，不能按 mode 直接断言。
-  //   原先写死成「由 <model> 自主调用工具生成」——只要拿到了模型响应就这么说，
-  //   哪怕它一次工具都没调。于是会出现同一屏上「自主调用工具生成」与
-  //   「本次没有调用工具」并存的情况。宁可说得朴素，也不能说得比实际更硬。
+  // Describe tool use from recorded calls, not model mode alone.
   const nCalls = (out.tool_calls || []).length;
   const modeNote = {
     gemini: nCalls
-      ? `由 ${out.model} 自主调用工具生成（${nCalls} 次调用）`
-      : `由 ${out.model} 直接作答，本次未调用工具`,
-    fallback: '模型调用失败，已降级为离线规则模板',
-    offline: '离线规则模板，未调用大模型',
+      ? `${out.model} with ${nCalls} tool calls`
+      : `${out.model} direct response; no tool calls`,
+    fallback: 'Model requests failed; using offline rule baseline',
+    offline: 'Offline rule baseline; no model used',
   }[out.mode] || out.mode;
   const degraded = (out.degraded || []).length
-    ? `　← 已从 ${out.degraded.map((d) => d.model).join('、')} 降级`
+    ? ` · Fallback from ${out.degraded.map((d) => d.model).join(', ')}`
     : '';
-  $('#verdict-mode').textContent = `（${modeNote}${degraded}）${out.fromCache ? '　· 本地缓存' : ''}`;
+  $('#verdict-mode').textContent = `(${modeNote}${degraded})${out.fromCache ? ' · Local cache' : ''}`;
 
   if (out.degraded?.length) {
     $('#degradereason').style.display = 'block';
-    // 措辞刻意用「模型失败原因」而不是「换模型原因」：
-    // 全部模型都失败时并没有换成谁，写「换模型」会误导。
+    // Show failures for every attempted model, including when all fail.
     $('#degradereason').innerHTML =
-      '模型失败原因：' + out.degraded.map((d) => `<b>${esc(d.model)}</b> — ${esc(d.reason)}`).join('　｜　');
+      'Model failures: ' + out.degraded.map((d) => `<b>${esc(d.model)}</b> - ${esc(d.reason)}`).join(' ｜ ');
   }
 
   if (!v) {
-    // 模型没有登记结构化建议——如实说明，不替它编一个结论
+    // Do not infer a structured decision from unstructured model text.
     $('#verdict').className = 'verdict';
     $('#verdict').innerHTML = `
-      <div class="big"><div class="lbl">是否报修</div><div class="val">未登记</div></div>
+      <div class="big"><div class="lbl">Hardware repair</div><div class="val">Not registered</div></div>
       <div class="meta">
-        <div class="row"><span class="k">说明</span>
-          <span class="hint">模型本次没有通过 <code>propose_fix</code> 登记结构化结论，
-          因此没有可核对的分类与报修判断。上方规则预判可作参考，但它不读趋势、不辨因果链。
-          这种情况本身也是一个信号：<b>证据可能不足以支撑一个明确结论。</b></span></div>
+        <div class="row"><span class="k">Details</span>
+          <span class="hint">The model did not use <code>propose_fix</code> to register a structured decision.
+          No verifiable classification or repair decision is available. The rule baseline does not analyze trends or causal chains.
+          <b>Evidence may be insufficient for a firm decision.</b></span></div>
       </div>`;
     return;
   }
@@ -264,20 +244,20 @@ function renderVerdict(out, v, c) {
   $('#verdict').className = `verdict ${v.should_rma ? 'rma' : 'norma'}`;
   $('#verdict').innerHTML = `
     <div class="big">
-      <div class="lbl">是否报修</div>
-      <div class="val">${v.should_rma ? '需要报修' : '不需要报修'}</div>
-      <div class="lbl" style="margin-top:8px">模型置信度 ${pct(conf)}</div>
+      <div class="lbl">Hardware repair</div>
+      <div class="val">${v.should_rma ? 'Repair required' : 'Repair not required'}</div>
+      <div class="lbl" style="margin-top:8px">Model confidence ${pct(conf)}</div>
     </div>
     <div class="meta">
-      <div class="row"><span class="k">故障分类</span><span class="strong">${esc(v.class_label || v.class)}</span></div>
-      <div class="row"><span class="k">置信度</span>
+      <div class="row"><span class="k">Classification</span><span class="strong">${esc(v.class_label || v.class)}</span></div>
+      <div class="row"><span class="k">Confidence</span>
         <span><span class="confbar"><i style="width:${Math.round(conf * 100)}%"></i></span></span></div>
-      ${expected ? `<div class="row"><span class="k">案例期望</span>
-        <span>${esc(expected.class)} · ${expected.should_rma ? '需报修' : '不需报修'}
-        ${agreeClass && agreeRma ? '<span class="chip" style="color:var(--ok);border-color:var(--ok)">与期望一致</span>'
-          : '<span class="chip" style="color:var(--warn);border-color:var(--warn)">与期望不一致</span>'}</span></div>` : ''}
-      <div class="row"><span class="k">为什么值钱</span>
-        <span class="hint">${esc(expected?.trap || '——')}</span></div>
+      ${expected ? `<div class="row"><span class="k">Expected decision</span>
+        <span>${esc(expected.class)} · ${expected.should_rma ? 'Repair' : 'No repair'}
+        ${agreeClass && agreeRma ? '<span class="chip" style="color:var(--ok);border-color:var(--ok)">Matches expectations</span>'
+          : '<span class="chip" style="color:var(--warn);border-color:var(--warn)">Differs from expectations</span>'}</span></div>` : ''}
+      <div class="row"><span class="k">Diagnostic challenge</span>
+        <span class="hint">${esc(expected?.trap || '--')}</span></div>
     </div>`;
 }
 
@@ -286,52 +266,52 @@ function renderEvidence(evidence, pre) {
   const tel = evidence.node_telemetry || {};
   const items = [];
 
-  items.push(['报错原文', `<pre class="cmd" style="margin:0">${esc(String(evidence.stderr_excerpt || '（无）').slice(0, 900))}</pre>`, '']);
+  items.push(['Original error text', `<pre class="cmd" style="margin:0">${esc(String(evidence.stderr_excerpt || '(none)').slice(0, 900))}</pre>`, '']);
 
   const env = evidence.environment || {};
   items.push([
-    '环境版本栈',
-    Object.entries(env).map(([k, v]) => `${esc(k)}=${esc(v)}`).join('<br>') || '（未提供）',
+    'Environment versions',
+    Object.entries(env).map(([k, v]) => `${esc(k)}=${esc(v)}`).join('<br>') || '(not supplied)',
     c.compat_ok === false ? 'bad' : 'good',
   ]);
 
   items.push([
-    '检出的 Xid',
+    'Detected Xid codes',
     c.xids.length
-      ? c.xids.map((x) => `Xid ${x.code} ×${x.count}　${x.known ? esc(x.name) : '<b>知识库无记录</b>'}`).join('<br>')
-      : '未检出',
+      ? c.xids.map((x) => `Xid ${x.code} ×${x.count} ${x.known ? esc(x.name) : '<b>No knowledge-base record</b>'}`).join('<br>')
+      : 'None detected',
     c.xids.some((x) => !x.known) ? 'bad' : '',
   ]);
 
-  items.push(['匹配到的特征', c.signatures.length ? c.signatures.map((s) => esc(s.label)).join('<br>') : '未匹配', '']);
+  items.push(['Matched signatures', c.signatures.length ? c.signatures.map((s) => esc(s.label)).join('<br>') : 'No matches', '']);
 
   if (c.memory_fit) {
     items.push([
-      '显存核算',
-      `${c.memory_required_gb} GB / 容量 ${c.memory_capacity_gb} GB<br>判定 <b>${esc(c.memory_fit)}</b>`,
+      'GPU memory estimate',
+      `${c.memory_required_gb} GB / Capacity ${c.memory_capacity_gb} GB<br>Result <b>${esc(c.memory_fit)}</b>`,
       c.memory_fit === 'will_oom' ? 'bad' : 'good',
     ]);
   }
 
-  items.push(['版本自检', c.compat_ok ? '版本组合自洽' : esc((c.compat_issues || []).join('；')), c.compat_ok ? 'good' : 'bad']);
+  items.push(['Compatibility check', c.compat_ok ? 'Compatible version stack' : esc((c.compat_issues || []).join('; ')), c.compat_ok ? 'good' : 'bad']);
 
   const evt = (tel.xid_events || []);
   if (evt.length) {
     items.push([
-      '节点遥测 · Xid 事件',
+      'Node telemetry · Xid events',
       evt.map((e) => `Xid ${e.code}${e.gpu !== undefined ? ` · GPU ${e.gpu}` : ''}${e.at ? ` · ${esc(e.at)}` : ''}${e.count ? ` ×${e.count}` : ''}`).join('<br>'),
       '',
     ]);
   }
   if (tel.history_30d) {
     items.push([
-      '节点遥测 · 30 天趋势',
-      `Xid 94 累计 <b>${tel.history_30d.xid94_count}</b> 次<br>可纠正 ECC 趋势 <b>${esc(tel.history_30d.ecc_correctable_trend)}</b>`,
+      'Node telemetry · 30-day trend',
+      `Xid 94 total <b>${tel.history_30d.xid94_count}</b> events<br>Correctable ECC trend <b>${esc(tel.history_30d.ecc_correctable_trend)}</b>`,
       tel.history_30d.ecc_correctable_trend === 'rising' ? 'bad' : '',
     ]);
   }
   if (tel.ecc_uncorrectable !== undefined) {
-    items.push(['ECC', `不可纠正 ${tel.ecc_uncorrectable}　可纠正 ${tel.ecc_correctable}`, tel.ecc_uncorrectable > 0 ? 'bad' : '']);
+    items.push(['ECC', `Uncorrectable ${tel.ecc_uncorrectable} Correctable ${tel.ecc_correctable}`, tel.ecc_uncorrectable > 0 ? 'bad' : '']);
   }
 
   $('#evidence').innerHTML = `<div class="grid">${items
@@ -341,38 +321,31 @@ function renderEvidence(evidence, pre) {
   $('#verdict-mode').dataset.evidenceReady = '1';
 }
 
-/**
- * 工具轨迹的 HTML。**单次分诊与值班巡检共用同一份渲染**。
- *
- * 抽出来是因为值班页原本没有这一栏 —— 于是「证据链」这个卖点在值班模式下
- * 根本看不见，而值班恰恰是最需要让人信服它「不是随便给个结论」的地方。
- */
+/* Share the tool trace renderer between case triage and patrol. */
 function toolTraceHtml(out) {
   const calls = out.tool_calls || [];
   const refs = (out.citations || [])
     .map((c) => `${c.ref} = ${c.source}`)
-    .join('　');
+    .join(' ');
   let html;
   if (calls.length) {
     html = calls
       .map((c) => `<li><b>${esc(c.name)}</b><span>${esc(JSON.stringify(c.args))}</span></li>`)
-      .join('') + (refs ? `<li><b>引用表</b><span>${esc(refs)}</span></li>` : '');
+      .join('') + (refs ? `<li><b>Reference map</b><span>${esc(refs)}</span></li>` : '');
   } else if (out.pipeline_error || refs) {
-    // ★ 有引用就说明工具跑过；有 pipeline_error 就是打包链路自报的问题。
-    //   两种情况都**必须显式报出来**，不能默默显示成「本次没有调用工具」——
-    //   那会把一个 bug 伪装成一次正常行为（这个坑真的踩过）。
-    html = `<li class="fail"><b>链路异常</b><span>`
-      + esc(out.pipeline_error || `本次存在 ${(out.citations || []).length} 条工具引用（${refs}），但没有调用记录。`)
+    // Citations without call records indicate an incomplete pipeline; show the error.
+    html = `<li class="fail"><b>Pipeline error</b><span>`
+      + esc(out.pipeline_error || `${(out.citations || []).length} tool references (${refs}) exist without call records.`)
       + `</span></li>`;
   } else {
-    html = '<li><span>本次没有调用工具：结论来自离线规则或模型直接输出。</span></li>';
+    html = '<li><span>No tool calls: output came from offline rules or a direct model response.</span></li>';
   }
-  if (out.error) html += `<li><b>错误</b><span>${esc(out.error)}</span></li>`;
+  if (out.error) html += `<li><b>Error</b><span>${esc(out.error)}</span></li>`;
   return { calls, html };
 }
 
 function toolCountText(calls) {
-  return calls.length ? `共 ${calls.length} 次调用` : '（无工具调用）';
+  return calls.length ? `${calls.length} tool calls` : '(no tool calls)';
 }
 
 function renderTools(out) {
@@ -380,21 +353,19 @@ function renderTools(out) {
   $('#toolcount').textContent = toolCountText(calls);
   $('#tools').innerHTML = html;
 }
-
-// ---------------------------------------------------------------- 处置与审批
 function renderActions(out) {
   const actions = out.actions || [];
   const box = $('#actions');
   if (!actions.length) {
-    box.innerHTML = '<div class="hint">本次没有登记任何处置建议。</div>';
+    box.innerHTML = '<div class="hint">No action recommendations registered.</div>';
     $('#approval-global').innerHTML = '';
     $('#acts-hint').textContent = '';
     return;
   }
 
-  $('#acts-hint').textContent = `${actions.length} 条，按风险从低到高排列`;
+  $('#acts-hint').textContent = `${actions.length} actions, ordered by risk`;
 
-  // 按风险分组渲染：不同风险级的审批要求不同，混在一起会把要求稀释掉
+  // Group actions by risk so approval requirements remain visible.
   const order = { low: 0, medium: 1, high: 2 };
   const sorted = actions.slice().sort((a, b) => (order[a.risk] ?? 9) - (order[b.risk] ?? 9));
 
@@ -435,26 +406,26 @@ function actionCard(a) {
       <span class="badge ${a.risk}">${esc(a.risk_label || a.risk)}</span>
       <span class="t">${esc(a.action_label || a.title)}</span>
       ${refs}
-      ${a.should_rma === true ? '<span class="badge high">建议报修</span>' : ''}
-      ${a.should_rma === false ? '<span class="badge info">不建议报修</span>' : ''}
-      <span class="chip">置信度 ${pct(a.confidence)}</span>
+      ${a.should_rma === true ? '<span class="badge high">Repair recommended</span>' : ''}
+      ${a.should_rma === false ? '<span class="badge info">Repair not recommended</span>' : ''}
+      <span class="chip">Confidence ${pct(a.confidence)}</span>
     </div>
     <div class="d">${esc(a.detail || '')}</div>
     <div class="rows">
-      <div>影响面：<b>${esc(a.affects || '—')}</b></div>
-      <div>审批要求：<b>${esc(a.approval_requirement || RISK_LEVELS[a.risk]?.approval || '—')}</b></div>
-      ${a.cmds?.length ? `<div>命令：<code>${esc(a.cmds[0])}</code>${a.cmds.length > 1 ? ` <span class="hint">（共 ${a.cmds.length} 行，见执行包）</span>` : ''}</div>` : ''}
-      ${a.rollback ? `<div>回滚：<b>${esc(a.rollback)}</b></div>` : '<div style="color:var(--warn)">★ 缺回滚方案，不允许进执行包</div>'}
+      <div>Impact: <b>${esc(a.affects || '-')}</b></div>
+      <div>Approval: <b>${esc(a.approval_requirement || RISK_LEVELS[a.risk]?.approval || '-')}</b></div>
+      ${a.cmds?.length ? `<div>Command: <code>${esc(a.cmds[0])}</code>${a.cmds.length > 1 ? ` <span class="hint">(${a.cmds.length} lines; see execution package)</span>` : ''}</div>` : ''}
+      ${a.rollback ? `<div>Rollback: <b>${esc(a.rollback)}</b></div>` : '<div style="color:var(--warn)">No rollback plan; excluded from execution package</div>'}
       ${a.note ? `<div class="hint">${esc(a.note)}</div>` : ''}
-      ${a.evidence ? `<div class="hint">依据：${esc(a.evidence)}</div>` : ''}
+      ${a.evidence ? `<div class="hint">Evidence: ${esc(a.evidence)}</div>` : ''}
     </div>
     <div class="acts-actions">
-      ${isPending ? `<button class="mini accept" data-act="approve" data-id="${esc(a.id)}">批准</button>
-                     <button class="mini reject" data-act="reject" data-id="${esc(a.id)}">拒绝</button>`
-        : `<span class="chip">${st.decision === 'approve' ? '已批准' : '已拒绝'} · ${esc(clock(st.decidedAt))}</span>
-           <button class="mini ghost" data-act="reset" data-id="${esc(a.id)}">撤销</button>`}
+      ${isPending ? `<button class="mini accept" data-act="approve" data-id="${esc(a.id)}">Approve</button>
+                     <button class="mini reject" data-act="reject" data-id="${esc(a.id)}">Reject</button>`
+        : `<span class="chip">${st.decision === 'approve' ? 'Approved' : 'Rejected'} · ${esc(clock(st.decidedAt))}</span>
+           <button class="mini ghost" data-act="reset" data-id="${esc(a.id)}">Undo</button>`}
       ${needAck ? `<label class="chk"><input type="checkbox" data-ack="${esc(a.id)}" ${st.impact_ack ? 'checked' : ''}>
-        我已确认该节点上的其他任务会被影响</label>` : ''}
+        I acknowledge the impact on other tasks on this node</label>` : ''}
     </div>
   </div>`;
 }
@@ -465,6 +436,7 @@ function renderApprovalBar() {
   const plan = buildApprovalPlan(ids);
   const approved = actions.filter((a) => S.approvals[a.id]?.decision === 'approve');
   const rejected = actions.filter((a) => S.approvals[a.id]?.decision === 'reject');
+  const pending = actions.length - approved.length - rejected.length;
   const highNeeded = approved.some((a) => a.risk === 'high');
   const medNeeded = approved.some((a) => a.risk === 'medium');
 
@@ -474,34 +446,41 @@ function renderApprovalBar() {
     ticket: S.ticket,
     approver: S.approver,
   });
+  const approvalReady = approved.length > 0 && v.ok;
+  const noApprovalMessage = pending > 0
+    ? 'No actions approved. Pending actions remain excluded from execution.'
+    : 'No actions approved. The execution package contains no executable actions.';
 
   $('#approval-global').innerHTML = `
     <div class="rows" style="margin-bottom:9px">
-      <div>审批进度：<b>已批准 ${approved.length}</b> ｜ 已拒绝 ${rejected.length} ｜ 待决 ${actions.length - approved.length - rejected.length}</div>
-      ${plan.highestRisk ? `<div>本次最高风险：<b>${RISK_LEVELS[plan.highestRisk].label}</b>　${RISK_LEVELS[plan.highestRisk].approval_detail}</div>` : ''}
+      <div>Approval status: <b>Approved ${approved.length}</b> ｜ Rejected ${rejected.length} ｜ Pending ${pending}</div>
+      ${plan.highestRisk ? `<div>Highest risk: <b>${RISK_LEVELS[plan.highestRisk].label}</b> ${RISK_LEVELS[plan.highestRisk].approval_detail}</div>` : ''}
     </div>
     ${highNeeded ? `
       <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;max-width:560px;margin-bottom:6px">
-        <div><div class="hint" style="margin-bottom:4px">变更单号（高风险必填）</div>
-          <input type="text" id="ticket-input" value="${esc(S.ticket)}" placeholder="如 CHG-2026-1014-01"></div>
-        <div><div class="hint" style="margin-bottom:4px">审批人（高风险必填）</div>
-          <input type="text" id="approver-input" value="${esc(S.approver)}" placeholder="如 litao"></div>
+        <div><div class="hint" style="margin-bottom:4px">Change-ticket number (required for high risk)</div>
+          <input type="text" id="ticket-input" value="${esc(S.ticket)}" placeholder="e.g. CHG-2026-1014-01"></div>
+        <div><div class="hint" style="margin-bottom:4px">Approver (required for high risk)</div>
+          <input type="text" id="approver-input" value="${esc(S.approver)}" placeholder="e.g. litao"></div>
       </div>` : ''}
-    ${medNeeded && !v.ok ? `<div class="hint" style="color:var(--mid)">中风险动作需要勾选影响面确认后才能进执行包。</div>` : ''}
-    ${v.ok ? '<div class="hint" style="color:var(--ok)">审批要件已齐备，可以导出执行包。</div>' : ''}
-    ${!v.ok && v.blocking.length ? `<div class="hint" style="color:var(--warn)">${esc(v.blocking.join('；'))}</div>` : ''}`;
+    ${medNeeded && !v.ok ? `<div class="hint" style="color:var(--mid)">Medium-risk actions require impact acknowledgement before inclusion in the execution package.</div>` : ''}
+    ${approved.length === 0 ? `<div class="hint">${noApprovalMessage}</div>` : ''}
+    ${approvalReady ? '<div class="hint" style="color:var(--ok)">Approval requirements met. The execution package is ready to export.</div>' : ''}
+    ${!v.ok && v.blocking.length ? `<div class="hint" style="color:var(--warn)">${esc(v.blocking.join('; '))}</div>` : ''}`;
 
   const ti = $('#ticket-input');
   if (ti) ti.addEventListener('input', () => { S.ticket = ti.value; });
   const ai = $('#approver-input');
   if (ai) ai.addEventListener('input', () => { S.approver = ai.value; });
 
-  $('#pkg-hint').textContent = v.ok
-    ? '审批要件齐备'
-    : '仍可下载：未获批准的动作会在执行包里标注「未批准，请勿执行」';
+  $('#pkg-hint').textContent = approvalReady
+    ? 'Approval requirements met'
+    : approved.length === 0
+      ? 'No actions approved; pending and rejected actions remain non-executable.'
+      : 'Download available; unapproved actions are marked "Not approved; do not execute."';
 }
 
-/** 把界面上的审批状态映射成 action_id → 状态，供 validateApproval 使用。 */
+/* Map UI approval state to action_id for validation. */
 function approvalMap() {
   const map = {};
   for (const a of S.result?.actions || []) {
@@ -538,7 +517,7 @@ function exportPackage() {
   });
 
   download(`triage-${c.id || 'case'}-${new Date().toISOString().slice(0, 10)}.md`, md);
-  setStatus('#case-status', '执行包已下载');
+  setStatus('#case-status', 'Execution package downloaded');
 }
 
 function download(filename, text) {
@@ -551,9 +530,9 @@ function download(filename, text) {
 }
 
 // ======================================================================
-// 值班巡检
+// On-call patrol
 // ======================================================================
-/** 概览卡里用的小图标（内联 SVG，不引任何 CDN）。 */
+/* Inline SVG icons with no CDN dependency. */
 const ICO = {
   nodes: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><rect x="3" y="4" width="18" height="6" rx="1.5"/><rect x="3" y="14" width="18" height="6" rx="1.5"/><path d="M7 7h.01M7 17h.01"/></svg>',
   alert: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3.5 21 19H3z"/><path d="M12 10v4M12 16.5h.01"/></svg>',
@@ -561,15 +540,7 @@ const ICO = {
   chip: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"><rect x="7" y="7" width="10" height="10" rx="1.5"/><path d="M10 3v4M14 3v4M10 17v4M14 17v4M3 10h4M3 14h4M17 10h4M17 14h4"/></svg>',
 };
 
-/**
- * 集群概览条。
- *
- * ★ 每一个数字都从**这次实际读到的节点**算出来，没有一个写死的常量。
- *   原因很直接：巡检会真的 cordon 节点、重置会真的改回来，
- *   概览里的「已 cordon」必须跟着动 —— 写死的话，它就成了界面在撒谎。
- *   「异常节点」用 nodeSignals() 判定，和节点卡片上显示的信号是**同一个函数**，
- *   不会出现「卡片有信号但概览说没有」这种自相矛盾。
- */
+/* Calculate KPIs from the latest nodes. Use nodeSignals for both alerts and node cards. */
 function renderClusterKpis(nodes) {
   const box = $('#cluster-kpis');
   if (!box) return;
@@ -578,7 +549,7 @@ function renderClusterKpis(nodes) {
   const slots = nodes.reduce((s, x) => s + (Number(x.gpu_count) || 0), 0);
   const cordoned = nodes.filter((x) => x.cordoned);
   const byType = {};
-  for (const x of nodes) byType[x.gpu_type || '未知'] = (byType[x.gpu_type || '未知'] || 0) + 1;
+  for (const x of nodes) byType[x.gpu_type || 'Unknown'] = (byType[x.gpu_type || 'Unknown'] || 0) + 1;
 
   const bar = (parts) =>
     `<div class="sbar">${parts
@@ -593,34 +564,39 @@ function renderClusterKpis(nodes) {
     `<div class="ks">${sub}</div>${extra}</div>`;
 
   box.innerHTML =
-    card(ICO.nodes, '集群节点', n, '台',
-      `卡位合计 ${slots} · ${esc(Object.entries(byType).map(([k, v]) => `${k} ×${v}`).join(' · '))}`,
+    card(ICO.nodes, 'Cluster nodes', n, 'nodes',
+      `Total GPU slots ${slots} · ${esc(Object.entries(byType).map(([k, v]) => `${k} ×${v}`).join(' · '))}`,
       bar([[(n - alerts.length) * 100 / n, 'var(--ok)'], [alerts.length * 100 / n, 'var(--bad)']])) +
-    card(ICO.alert, '存在异常现象的节点', alerts.length, '个',
-      '判据是 nodeSignals()：Xid / ECC / smi / 进程阻塞，任一非空即计入',
+    card(ICO.alert, 'Flagged nodes', alerts.length, 'nodes',
+      'Flags: Xid, ECC, smi, or blocked processes',
       alerts.length ? chips(alerts.map((x) => x.node), 'bad')
-        : '<div class="schips"><span class="schip ok">全部无异常</span></div>') +
-    card(ICO.cordon, '已 cordon', cordoned.length, '个',
-      cordoned.length ? '禁止接新任务，等人工处置' : '当前没有节点被隔离',
+        : '<div class="schips"><span class="schip ok">No flags</span></div>') +
+    card(ICO.cordon, 'Cordoned', cordoned.length, 'nodes',
+      cordoned.length ? 'New tasks blocked; awaiting operator review' : 'No cordoned nodes',
       cordoned.length ? chips(cordoned.map((x) => x.node), 'warn') : '') +
-    card(ICO.chip, '卡位', slots, '张',
-      `读取于 ${esc(new Date().toLocaleTimeString('zh-CN', { hour12: false }))} · cluster 集合 ${nodes.length} 个文档`);
+    card(ICO.chip, 'GPU slots', slots, 'GPUs',
+      `Read at ${esc(new Date().toLocaleTimeString('en-US', { hour12: false }))} · ${nodes.length} cluster documents`);
 }
 
-async function refreshCluster() {
+async function refreshCluster({ canRender = () => true } = {}) {
   const box = $('#nodes');
   try {
+    if (!canRender()) return false;
     const nodes = await clusterApi.listNodes();
+    if (!canRender()) return false;
     const alerts = nodes.filter((n) => nodeSignals(n).length).length;
     $('#cluster-meta').textContent =
-      `${nodes.length} 个节点，其中 ${alerts} 个存在异常现象　·　数据来自 Cloud Firestore（实时读取）`;
+      `${nodes.length} nodes; ${alerts} flagged · Live read from Cloud Firestore`;
     renderClusterKpis(nodes);
     box.innerHTML = nodes.map(nodeCard).join('');
-    await Promise.all([renderEvents(), renderTickets(), renderNotifications()]);
+    await Promise.all([renderEvents(canRender), renderTickets(canRender), renderNotifications(canRender)]);
+    return canRender();
   } catch (err) {
-    box.innerHTML = `<div class="hint" style="color:var(--warn)">集群读取失败：${esc(err.message)}</div>`;
+    if (!canRender()) return false;
+    box.innerHTML = `<div class="hint" style="color:var(--warn)">Cluster read failed: ${esc(err.message)}</div>`;
     const k = $('#cluster-kpis');
     if (k) k.innerHTML = '';
+    return false;
   }
 }
 
@@ -628,49 +604,43 @@ function nodeCard(n) {
   const sigs = nodeSignals(n);
   const cls = !sigs.length ? 'ok' : n.status === 'hang' || n.status === 'degraded' ? 'crit' : 'alert';
   const jobs = (n.jobs || []).map((j) => `${j.id}(${j.user})`);
-  // ★ `.s.job` 那个 job 类名是给样式用的：D 版节点是「单栏横向整行」，
-  //   三个信息块靠 grid 的显式列定位（名字 / 规格·状态 / 任务），
-  //   两个 .s 长得一样，样式没法区分谁是谁。加一个类名比在样式里写
-  //   :nth-child(3) 稳 —— 任务行是可选的，nth-child 会错位。
+  // The job class gives optional job rows stable grid placement.
   return `
   <div class="node ${cls}">
     <div class="n">${esc(n.node)}</div>
-    <div class="s">${esc(n.gpu_type || '')} · ${esc(n.status)}${n.cordoned ? ' · 已 cordon' : ''}</div>
-    ${jobs.length ? `<div class="s job">任务：${esc(jobs.join('、'))}</div>` : ''}
-    ${sigs.length ? `<div class="sig">${sigs.map((s) => esc(s)).join('<br>')}</div>` : '<div class="cordon">无异常信号</div>'}
+    <div class="s">${esc(n.gpu_type || '')} · ${esc(n.status)}${n.cordoned ? ' · Cordoned' : ''}</div>
+    ${jobs.length ? `<div class="s job">Jobs: ${esc(jobs.join(', '))}</div>` : ''}
+    ${sigs.length ? `<div class="sig">${sigs.map((s) => esc(s)).join('<br>')}</div>` : '<div class="cordon">No flagged signals</div>'}
   </div>`;
 }
 
 async function runPatrol() {
   const btn = $('#run-patrol');
   btn.disabled = true;
+  $('#tab-patrol').dataset.state = 'running';
 
-  // ★ 巡检期间定时刷新。
-  //
-  // 动作是**一步步真的落库**的（cordon 写完、工单写完、通知写完各是一次网络往返），
-  // 所以这里让人看见它一条条落下来的过程，而不是等结束了再一次性刷出来 ——
-  // 后者看完只会觉得「刷了一下」；前者能看出它真的在动。
-  //
-  // 顺带解决一个体验问题：巡检要跑 30–120 秒（取决于模型响应速度与上游是否抖动）。
-  // 没有过程显示时，这一分多钟看起来就是「点了没反应」。
+  // Refresh during patrol to show persisted actions as they complete.
   let ticking = false;
+  let periodicActive = true;
   const tick = setInterval(() => {
-    if (ticking) return; // 上一次还没回来就跳过，避免请求叠在一起
+    if (ticking) return; // Skip overlapping refresh requests.
     ticking = true;
     Promise.resolve()
-      .then(() => refreshCluster())
-      .catch(() => { /* 刷新失败不打扰主流程，它会自己重试 */ })
-      .finally(() => { ticking = false; });
+      .then(() => refreshCluster({ canRender: () => periodicActive }))
+      .catch(() => { /* Refresh failures do not interrupt patrol; the next tick retries. */ })
+      .finally(() => {
+        ticking = false;
+      });
   }, 2500);
 
   try {
-    setStatus('#patrol-status', '读取集群…');
-    $('#patrol-tools').innerHTML = '<li><span>巡检中…</span></li>';
+    setStatus('#patrol-status', 'Reading cluster…');
+    $('#patrol-tools').innerHTML = '<li><span>Patrol running…</span></li>';
     $('#patrol-toolcount').textContent = '';
     await refreshCluster();
 
     const nodes = await clusterApi.listNodes();
-    setStatus('#patrol-status', '巡检中，模型将自行扫描并处置…');
+    setStatus('#patrol-status', 'Patrol running; scanning and applying permitted actions…');
 
     const out = await patrol({
       cluster: clusterApi,
@@ -684,71 +654,79 @@ async function runPatrol() {
     $('#patrol-toolcount').textContent = toolCountText(trace.calls);
     $('#patrol-tools').innerHTML = trace.html;
     $('#patrol-mode').textContent = out.mode === 'gemini'
-      ? `由 ${out.model} 自主执行${out.resumed ? '（上游失败过一次，已带进度续跑）' : ''}`
-      : '（离线规则路径，未调用模型）';
+      ? `Executed by ${out.model}${out.resumed ? ' (resumed after upstream failure)' : ''}`
+      : '(offline rule baseline; no model used)';
     $('#patrol-report-sec').style.display = 'block';
 
-    // 报告里如果提到执行失败，界面上必须也看得见——不能只在日志里
+    // Expose failed action verification in the patrol status.
     if ((out.executions || []).some((e) => e.event && !e.event.verified)) {
-      setStatus('#patrol-status', '完成，但有一条动作回验未通过，见操作日志');
+      setStatus('#patrol-status', 'Complete; an action failed verification. See operation log.');
     } else {
-      setStatus('#patrol-status', `完成：执行 ${(out.executions || []).length} 个动作，`
-        + `建工单 ${(out.tickets || []).length} 张，通知 ${(out.notifications || []).length} 条`);
+      setStatus('#patrol-status', `Complete: ${(out.executions || []).length} actions, `
+        + `${(out.tickets || []).length} tickets, ${(out.notifications || []).length} notifications`);
     }
   } catch (err) {
-    setStatus('#patrol-status', `失败：${err.message}`);
+    setStatus('#patrol-status', `Failed: ${err.message}`);
+    $('#tab-patrol').dataset.state = 'failed';
   } finally {
+    periodicActive = false;
     clearInterval(tick);
-    await refreshCluster();
+    const refreshed = await refreshCluster();
+    if ($('#tab-patrol').dataset.state === 'running') {
+      $('#tab-patrol').dataset.state = refreshed ? 'complete' : 'failed';
+    }
     btn.disabled = false;
   }
 }
 
-async function renderEvents() {
+async function renderEvents(canRender = () => true) {
   const docs = await clusterApi.listDocs('events');
+  if (!canRender()) return;
   docs.sort((a, b) => String(b.at || '').localeCompare(String(a.at || '')));
-  $('#events-count').textContent = docs.length ? `${docs.length} 条` : '';
+  $('#events-count').textContent = docs.length ? `${docs.length} entries` : '';
   $('#events').innerHTML = docs.length
     ? docs
         .map((e) => {
           const cls = e.status === 'ok' ? 'ok' : e.status === 'unverified' || e.status === 'error' ? 'fail' : 'info';
-          const mark = e.status === 'ok' ? '回验通过' : e.status === 'unverified' ? '回验未通过' : e.status === 'error' ? '执行出错' : e.status;
+          const mark = e.status === 'ok' ? 'Verified' : e.status === 'unverified' ? 'Verification failed' : e.status === 'error' ? 'Execution error' : e.status;
           return `<li class="${cls}">
-            <div class="tm">${esc(clock(e.at))}　${esc(e.node)}　${esc(e.risk)}　${esc(mark)}</div>
+            <div class="tm">${esc(clock(e.at))} ${esc(e.node)} ${esc(e.risk)} ${esc(mark)}</div>
             <div class="tx">${esc(e.describe || e.action_label || e.action_id)}</div>
-            ${e.reason ? `<div class="hint">理由：${esc(e.reason)}</div>` : ''}
+            ${e.reason ? `<div class="hint">Reason: ${esc(e.reason)}</div>` : ''}
             ${e.error ? `<div class="hint" style="color:var(--warn)">${esc(e.error)}</div>` : ''}
           </li>`;
         })
         .join('')
-    : '<li><span class="tx">暂无操作记录</span></li>';
+    : '<li><span class="tx">No operations recorded</span></li>';
 }
 
-async function renderTickets() {
+async function renderTickets(canRender = () => true) {
   const docs = await clusterApi.listDocs('tickets');
+  if (!canRender()) return;
   docs.sort((a, b) => String(b.created_at || '').localeCompare(String(a.created_at || '')));
-  $('#tickets-count').textContent = docs.length ? `${docs.length} 张` : '';
+  $('#tickets-count').textContent = docs.length ? `${docs.length} tickets` : '';
   $('#tickets').innerHTML = docs.length
     ? docs
         .map(
           (t) => `<div class="tk">
-        <div class="h"><span class="badge ${t.approved ? 'low' : 'high'}">${t.approved ? '已提交' : '草稿 · 待人工提交'}</span>
+        <div class="h"><span class="badge ${t.approved ? 'low' : 'high'}">${t.approved ? 'Submitted' : 'Draft · Awaiting human submission'}</span>
           <span class="strong">${esc(t.title)}</span>
           <span class="chip">${esc(t.node)}</span>
           ${t.action_id ? `<span class="chip">${esc(t.action_id)}</span>` : ''}</div>
         <div class="b">${esc(String(t.body || '').slice(0, 420))}</div>
         ${(t.evidence_refs || []).length ? `<div style="margin-top:6px">${t.evidence_refs.map((r) => `<span class="chip ref">${esc(r)}</span>`).join('')}</div>` : ''}
-        <div style="margin-top:8px" class="hint">提交这一步必须由人完成：报修不可逆，走一次 RMA 集群就少一块卡。</div>
+        <div style="margin-top:8px" class="hint">A human must submit the ticket. RMA removes hardware capacity.</div>
       </div>`,
         )
         .join('')
-    : '<div class="hint">暂无待批准事项</div>';
+    : '<div class="hint">No pending approvals</div>';
 }
 
-async function renderNotifications() {
+async function renderNotifications(canRender = () => true) {
   const docs = await clusterApi.listDocs('notifications');
+  if (!canRender()) return;
   docs.sort((a, b) => String(b.at || '').localeCompare(String(a.at || '')));
-  $('#notif-count').textContent = docs.length ? `${docs.length} 条 · 队列中` : '';
+  $('#notif-count').textContent = docs.length ? `${docs.length} queued` : '';
   $('#notifications').innerHTML = docs.length
     ? docs
         .map(
@@ -760,26 +738,29 @@ async function renderNotifications() {
       </div>`,
         )
         .join('')
-    : '<div class="hint">暂无通知</div>';
+    : '<div class="hint">No notifications</div>';
 }
 
 async function resetCluster() {
   const btn = $('#reset-cluster');
   btn.disabled = true;
+  $('#cluster-status').dataset.state = 'running';
   try {
-    setStatus('#patrol-status', '正在重置模拟集群…');
+    setStatus('#patrol-status', 'Resetting simulated cluster…');
     const n = await clusterApi.resetCluster();
-    setStatus('#patrol-status', `已重置 ${n} 个节点，操作日志与工单已清空`);
-    await refreshCluster();
+    setStatus('#patrol-status', `Reset ${n} nodes; operation logs and tickets cleared`);
+    const refreshed = await refreshCluster();
+    $('#cluster-status').dataset.state = refreshed ? 'reset' : 'failed';
   } catch (err) {
-    setStatus('#patrol-status', `重置失败：${err.message}`);
+    setStatus('#patrol-status', `Reset failed: ${err.message}`);
+    $('#cluster-status').dataset.state = 'failed';
   } finally {
     btn.disabled = false;
   }
 }
 
 // ======================================================================
-// 基准对照
+// Benchmark
 // ======================================================================
 function runBenchRule() {
   const rows = S.cases.map((c) => {
@@ -792,8 +773,8 @@ function runBenchRule() {
   S.benchRule = rows;
   const pass = rows.filter((r) => r.cmp.pass).length;
   $('#bench-rule').textContent = `${pass} / ${S.cases.length}`;
-  $('#bench-rule-sub').textContent = `本地运行，未消耗任何模型配额 · 分类正确 ${rows.filter((r) => r.cmp.class_ok).length} / ${S.cases.length}`;
-  setStatus('#bench-status', '规则基线已跑完（这一路完全在浏览器里算，可反复点）');
+  $('#bench-rule-sub').textContent = `Local run; no model quota used · Correct classifications ${rows.filter((r) => r.cmp.class_ok).length} / ${S.cases.length}`;
+  setStatus('#bench-status', 'Rule baseline complete (local browser calculation)');
   renderBenchTable();
 }
 
@@ -804,27 +785,27 @@ function renderBenchTable() {
     const aiPass = Object.values(S.benchAi).filter((v) => v.pass).length;
     $('#bench-ai').textContent = `${aiPass} / ${aiN}`;
     $('#bench-ai-sub').textContent = aiN < S.cases.length
-      ? `已跑 ${aiN} / ${S.cases.length} 个案例（在「单次分诊」里跑过的会自动计入）`
-      : '全部案例已跑完';
+      ? `${aiN} / ${S.cases.length} cases completed (includes case triage runs)`
+      : 'All cases completed';
   }
 
   if (!rows.length) {
-    $('#bench-tbl').innerHTML = '<tbody><tr><td class="hint">点击「跑规则基线」开始</td></tr></tbody>';
+    $('#bench-tbl').innerHTML = '<tbody><tr><td class="hint">Select Run rule baseline to begin</td></tr></tbody>';
     return;
   }
 
-  const head = ['案例', '期望分类', '期望报修', '规则给出', '规则结果', 'AI 给出', 'AI 结果'];
+  const head = ['Case', 'Expected class', 'Expected repair', 'Rule decision', 'Rule result', 'AI decision', 'AI result'];
   const body = rows
     .map((r) => {
       const ai = S.benchAi[r.c.id];
       return `<tr class="${r.cmp.pass ? '' : 'miss'}">
         <td class="mono">${esc(r.c.id)}</td>
         <td>${esc(r.c.expected.class)}</td>
-        <td>${r.c.expected.should_rma ? '是' : '否'}</td>
-        <td>${esc(r.r.class)} · ${r.r.should_rma ? '报修' : '不报修'}</td>
-        <td>${r.cmp.pass ? '对' : '<b style="color:var(--warn)">错</b>'}</td>
-        <td>${ai ? esc(ai.class) + ' · ' + (ai.should_rma ? '报修' : '不报修') : '<span class="hint">未跑</span>'}</td>
-        <td>${ai ? (ai.pass ? '对' : '<b style="color:var(--warn)">错</b>') : '<span class="hint">—</span>'}</td>
+        <td>${r.c.expected.should_rma ? 'Yes' : 'No'}</td>
+        <td>${esc(r.r.class)} · ${r.r.should_rma ? 'Repair' : 'No repair'}</td>
+        <td>${r.cmp.pass ? 'Pass' : '<b style="color:var(--warn)">Fail</b>'}</td>
+        <td>${ai ? esc(ai.class) + ' · ' + (ai.should_rma ? 'Repair' : 'No repair') : '<span class="hint">Not run</span>'}</td>
+        <td>${ai ? (ai.pass ? 'Pass' : '<b style="color:var(--warn)">Fail</b>') : '<span class="hint">-</span>'}</td>
       </tr>`;
     })
     .join('');
@@ -832,17 +813,17 @@ function renderBenchTable() {
     `<thead><tr>${head.map((h) => `<th>${h}</th>`).join('')}</tr></thead><tbody>${body}</tbody>`;
 }
 
-/** 依次跑 AI：会真的消耗配额，所以先确认，并且逐个显示进度。 */
+/* Run AI cases sequentially after quota confirmation; report progress. */
 async function runBenchAi() {
   const todo = S.cases.filter((c) => !S.benchAi[c.id]);
   if (!todo.length) {
-    setStatus('#bench-status', '全部案例都已经跑过 AI 了。');
+    setStatus('#bench-status', 'All cases have AI results.');
     return;
   }
   const ok = window.confirm(
-    `即将对 ${todo.length} 个案例逐个调用模型。\n\n` +
-      `每个案例可能产生多次模型请求（多回合工具调用），免费层配额有限。\n` +
-      `结果会缓存到本地，第二次运行不会重复消耗。\n\n继续吗？`,
+    `Run the model sequentially for ${todo.length} cases.\n\n` +
+      `Each case may make multiple model requests for tool calls. Free-tier quota is limited.\n` +
+      `Results are cached locally for reuse.\n\nContinue?`,
   );
   if (!ok) return;
 
@@ -850,46 +831,39 @@ async function runBenchAi() {
   btn.disabled = true;
   let done = 0;
   for (const c of todo) {
-    setStatus('#bench-status', `正在跑 ${++done} / ${todo.length}：${c.id}`);
+    setStatus('#bench-status', `Running ${++done} / ${todo.length}: ${c.id}`);
     try {
       const out = await diagnose({ caseObj: c });
       noteAiVerdict(c, out);
       S.cache[c.id] = out;
     } catch (err) {
-      setStatus('#bench-status', `${c.id} 失败：${err.message}（继续下一个）`);
+      setStatus('#bench-status', `${c.id} Failed: ${err.message} (continuing)`);
     }
     saveCache();
     renderBenchTable();
   }
-  setStatus('#bench-status', `AI 基准跑完，共 ${Object.keys(S.benchAi).length} 个案例。`);
+  setStatus('#bench-status', `AI benchmark complete: ${Object.keys(S.benchAi).length} cases.`);
   btn.disabled = false;
 }
 
 // ======================================================================
-// 动作库与审批
+// Action library and approvals
 // ======================================================================
 function renderActionsTab() {
   $('#risk-levels').innerHTML = RISK_ORDER.map((lv) => {
     const L = RISK_LEVELS[lv];
     const count = ACTION_LIST.filter((a) => a.risk === lv).length;
     return `<div class="ev" style="border-left:3px solid var(--${lv})">
-      <div class="k">${esc(L.label)}　${count} 条动作</div>
+      <div class="k">${esc(L.label)} ${count} actions</div>
       <div class="v">${esc(L.rule)}</div>
-      <div class="hint" style="margin-top:6px">审批：${esc(L.approval)}</div>
+      <div class="hint" style="margin-top:6px">Approval: ${esc(L.approval)}</div>
       <div class="hint">${esc(L.approval_detail)}</div>
     </div>`;
   }).join('');
 
-  $('#action-count').textContent = `共 ${ACTION_LIST.length} 条`;
-  const head = ['动作', '等级', '影响面', '命令', '预期输出', '回滚'];
-  // ★ 命令列的宽度只能由样式表决定，不能写死在这里。
-  //   这一格原来是 `<td class="mono" style="max-width:280px;…">`。那有两个问题：
-  //     1) 内联样式优先级最高 —— 表格给它多少宽度都没用，这一列被永久卡在 280px，
-  //        一条多行 shell 被断成每行三十来个字符；
-  //     2) 它和样式表里 #action-tbl 的 table-layout:fixed 列宽定义打架，
-  //        谁赢取决于写法，改动之后不看渲染结果根本不知道。
-  //   换成 class 之后，宽度只有一个来源。换行方式（pre-wrap + break-all）
-  //   挪进样式表，行为不变。
+  $('#action-count').textContent = `${ACTION_LIST.length} actions`;
+  const head = ['Action', 'Risk', 'Impact', 'Command', 'Expected output', 'Rollback'];
+  // Keep command-column widths and wrapping in the stylesheet.
   $('#action-tbl').innerHTML =
     `<thead><tr>${head.map((h) => `<th>${h}</th>`).join('')}</tr></thead><tbody>` +
     ACTION_LIST.map(
@@ -907,37 +881,37 @@ function renderActionsTab() {
   $('#discouraged').innerHTML = Object.values(DISCOURAGED_ACTIONS)
     .map(
       (d) => `<div class="act muted">
-      <div class="hd"><span class="badge info">不建议</span><span class="t">${esc(d.label)}</span>
+      <div class="hd"><span class="badge info">Discouraged</span><span class="t">${esc(d.label)}</span>
         <span class="hint mono">${esc(d.id)}</span></div>
       <div class="d">${esc(d.reason)}</div>
-      <div class="rows"><div>应该改为：<b>${esc(d.instead)}</b></div></div>
-      <div class="hint">这条动作保留在库里、但**不会出现在给模型的候选清单里**，界面上也灰显不可选。
-      系统知道有这条路，但选择不推荐它 —— 这本身就是一种判断力。</div>
+      <div class="rows"><div>Instead: <b>${esc(d.instead)}</b></div></div>
+      <div class="hint">This action is excluded from model candidates and is not selectable.
+      </div>
     </div>`,
     )
     .join('');
 
   $('#boundaries').innerHTML = `
-    <b>1. 不接入任何真实生产集群。</b>分诊用的案例是构造的，值班用的节点是模拟的。
-    真实的腾讯云 / 阿里云 / 百度云 / 智星云集群与 Google Cloud 之间没有网络通路，
-    从架构上也够不着。演示里的「执行」作用在一个有真实状态的模拟集群上 ——
-    它证明的是<b>闭环成立</b>，而不是「帮你运维生产集群」。
+    <b>1. Simulated cluster only.</b>Cases are synthetic; patrol nodes are simulated.
+    Production Tencent Cloud / Alibaba Cloud / Baidu Cloud / Zhixing Cloud clusters have no network connection to Google Cloud.
+    Actions update persistent state in the simulated cluster.
+    This demonstrates a <b>verified action loop</b>.
     <br><br>
-    <b>2. 模拟集群的安全规则是匿名可读写。</b>因为浏览器端没有登录流程。
-    生产部署必须换成基于 Auth 的规则；当前开放面被锁死在 4 个集合内，其余路径一律拒绝。
+    <b>2. Anonymous demo access.</b>The browser has no sign-in flow.
+    Production requires Auth-based rules. Demo access is limited to four collections; all other paths are denied.
     <br><br>
-    <b>3. 通知落到队列，不假装已经发出去。</b>真实部署时这里应接 IM / 邮件系统，
-    演示环境下它是「待推送」状态，方便现场核对内容是否准确。
+    <b>3. Queued notifications.</b>Production requires a messaging or email integration.
+    The demo queues notifications for review.
     <br><br>
-    <b>4. 主动巡检由人点一下启动。</b>纯静态站点没有常驻进程 ——
-    真实部署应由 Cloud Scheduler 之类定时触发。
+    <b>4. Manual patrol trigger.</b>This static site has no resident process.
+    Production would require a scheduler such as Cloud Scheduler.
     <br><br>
-    <b>5. 覆盖 24 个 Xid 码，查不到就说查不到。</b>知识库边界就是模型的能力边界。
-    遇到没有记录的码，工具返回「无记录，不得推测」，而不是让模型编一个解释。`;
+    <b>5. Knowledge-base coverage: 24 Xid codes.</b>Unknown codes remain unknown.
+    For missing entries, tools return "No record; do not infer."`;
 }
 
 // ======================================================================
-// 启动
+// Startup
 // ======================================================================
 async function init() {
   initTabs();
@@ -945,7 +919,7 @@ async function init() {
   try {
     await loadCases();
   } catch (err) {
-    setStatus('#case-status', `案例库加载失败：${err.message}`);
+    setStatus('#case-status', `Failed to load cases: ${err.message}`);
     return;
   }
 
@@ -961,14 +935,14 @@ async function init() {
     S.benchAi = {};
     S.cache = {};
     saveCache();
-    $('#bench-ai').textContent = '— / —';
+    $('#bench-ai').textContent = '- / -';
     renderBenchTable();
-    setStatus('#bench-status', '已清空本地缓存与 AI 基准结果');
+    setStatus('#bench-status', 'Local cache and AI benchmark results cleared');
   });
 
-  // 预热：把规则基线先跑好，切到「基准对照」时立刻能看到数字
+  // Calculate the local rule baseline before the benchmark tab opens.
   runBenchRule();
-  setStatus('#case-status', '选一个案例开始（规则基线已在后台跑好）');
+  setStatus('#case-status', 'Select a case to begin (rule baseline ready)');
 }
 
 init();

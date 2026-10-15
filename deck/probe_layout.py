@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""扫描线上截图，找出各卡片区块的精确像素边界（纵向白卡 vs 浅灰页底）。"""
+"""Find card boundaries in screenshots using white cards on a light gray background."""
 import sys
 from PIL import Image
 
@@ -25,7 +25,7 @@ def scan(path, x):
     print(f"### {path}  size={im.size}  column x={x}")
     for a, b, c in runs(im, x):
         print(f"  y {a:5d} - {b:5d}  h={b-a+1:5d}  rgb={c}")
-    # 横向：取中间高度那一行，找内容左右边界
+
     w, h = im.size
     px = im.load()
     y = h // 2

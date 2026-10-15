@@ -1,8 +1,8 @@
 {
   "meta": {
-    "note": "模拟集群的种子数据。这是演示用的**构造数据**，命名与体量均已脱敏，不含任何真实集群信息。",
-    "why": "把它放在数据文件里而不是写死在代码里，是为了让「后台播种脚本」和「前端一键重置」共用同一份真相来源——两边各存一份，早晚会漂移。",
-    "reset_hint": "重新播种：python3 scripts/fb_firestore_setup.py seed",
+    "note": "Constructed seed data for the simulated cluster; names and scale are demonstration identifiers, with no production-cluster information.",
+    "why": "The setup script and frontend reset share this seed to keep their initial state consistent.",
+    "reset_hint": "Reseed with: python3 scripts/fb_firestore_setup.py seed",
     "location": "asia-southeast1"
   },
   "nodes": {
@@ -145,12 +145,12 @@
     }
   },
   "expectations": {
-    "note": "每个节点被设计成「需要什么结论」，供演示脚本与自检使用。巡检时 agent 不该看到这一段——它只是给人看的对照表。",
-    "lyg2101": { "class": "healthy", "should_cordon": false, "should_rma": false, "why": "对照组，健康节点" },
-    "lyg2103": { "class": "hardware_watch", "should_cordon": false, "should_rma": false, "why": "Xid 94 单次，ECC 平稳；与 lyg2112 是同一个错误码，但结论相反" },
-    "lyg2107": { "class": "healthy", "should_cordon": false, "should_rma": false, "why": "对照组" },
-    "lyg2108": { "class": "environment", "should_cordon": false, "should_rma": false, "why": "smi 挂了但设备仍在 lspci、无 Xid 79 → 内核模块问题，重载即可，不是硬件" },
-    "lyg2112": { "class": "hardware", "should_cordon": true, "should_rma": true, "why": "Xid 94 七天上升 40 倍且 ECC 同步上升 → 真劣化。应先 cordon 止损，再走 RMA" },
-    "lyg2115": { "class": "environment", "should_cordon": true, "should_rma": false, "why": "Xid 62 + 进程 D 状态阻塞在 nv_open → 驱动侧挂死，不是硬件报废，但需先止损" }
+    "note": "Expected outcomes for local checks and demonstration preparation. Patrol does not receive this table.",
+    "lyg2101": { "class": "healthy", "should_cordon": false, "should_rma": false, "why": "Healthy control node." },
+    "lyg2103": { "class": "hardware_watch", "should_cordon": false, "should_rma": false, "why": "One Xid 94 with stable ECC; compare with lyg2112, which has the same code and a rising trend." },
+    "lyg2107": { "class": "healthy", "should_cordon": false, "should_rma": false, "why": "Healthy control node." },
+    "lyg2108": { "class": "environment", "should_cordon": false, "should_rma": false, "why": "nvidia-smi fails but devices remain in lspci and there is no Xid 79. Investigate kernel modules." },
+    "lyg2112": { "class": "hardware", "should_cordon": true, "should_rma": true, "why": "Xid 94 frequency rose fortyfold in 7 days with rising ECC. Cordon first, then prepare RMA." },
+    "lyg2115": { "class": "environment", "should_cordon": true, "should_rma": false, "why": "Xid 62 and D-state nv_open waits indicate a driver-side stall. Cordon first; hardware retirement is not yet supported." }
   }
 }

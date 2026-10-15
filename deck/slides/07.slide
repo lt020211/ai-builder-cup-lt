@@ -1,4 +1,4 @@
-// 07 · 没人贴日志 —— 左大图 + 右侧读数
+// 07: cluster capture at left and seed readings at right.
 const FONT = 'Inter, "Helvetica Neue", Arial, sans-serif';
 const MONO = '"JetBrains Mono", "SF Mono", Menlo, monospace';
 const INK = '#0B1220';
@@ -9,34 +9,30 @@ const DIM = '#64748B';
 const BODY = '#1A2434';
 
 const READOUT = [
-    { n: '6', c: INK, t: 'nodes in the demo cluster' },
-    { n: '4', c: RED, t: 'of them showing an anomaly right now' },
-    { n: '0', c: GREEN, t: 'log lines pasted in by the operator' },
+    { n: '6', c: INK, t: 'nodes in the constructed demo cluster' },
+    { n: '4', c: RED, t: 'nodes with anomaly signals in the seed' },
+    { n: '0', c: GREEN, t: 'log lines pasted for a patrol' },
 ];
 
 <Slide style={{ width: 1280, height: 720, padding: '18px 72px', background: '#FFFFFF', fontFamily: FONT }}>
     <Box style={{ width: 1136, height: 92, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end' }}>
-        <Text style={{ fontSize: 34, fontWeight: 700, color: INK, lineHeight: 1.3 }}>No log was pasted in</Text>
-        <Text style={{ fontFamily: MONO, fontSize: 14, color: DIM, lineHeight: 1.45 }}>Cluster tab · read live from Firestore</Text>
+        <Text style={{ fontSize: 34, fontWeight: 700, color: INK, lineHeight: 1.3 }}>Cluster inspection</Text>
+        <Text style={{ fontFamily: MONO, fontSize: 14, color: DIM, lineHeight: 1.45 }}>English UI, local seed replay</Text>
     </Box>
 
     <Box style={{ width: 1136, height: 544, flexDirection: 'row', gap: 36 }}>
 
         <Box style={{ width: 659, justifyContent: 'center' }}>
-            {/* 图片框 659×349 → 659×422。新版集群面板是 1152×763（比例 1.51），
-                旧框比例 1.888 比它更宽，按比例只能左右补 —— 补出来左右各有
-                144px 的空底色（整页边距），图片本身反而更小、字更看不清。
-                抬到 422 之后框刚好贴着面板留 20px 边，同样的宽度下字大了约两成。 */}
+            {/* Keep the supplied cluster screenshot frame and measured crop ratio. */}
             <Image src='assets/crop-cluster-card.png' style={{ width: 659, height: 422, border: '1px solid #E9EDF4' }} />
             <Text style={{ fontSize: 13, color: DIM, lineHeight: 1.5, marginTop: 14, width: 659 }}>
-                The cluster tab as it renders on load. The header reads: 6 nodes, 4 of them showing an anomaly,
-                read live from Cloud Firestore. The interface is in Chinese because the on-call team is
-                Chinese-speaking; every reading used in this deck is translated on the right.
+                The English application renders six seed nodes with four anomaly signals.
+                This capture uses local Firestore response fixtures and makes no external writes.
             </Text>
         </Box>
 
         <Box style={{ width: 441 }}>
-            <Text style={{ fontSize: 20, fontWeight: 600, color: INK, lineHeight: 1.45 }}>Where those numbers come from</Text>
+            <Text style={{ fontSize: 20, fontWeight: 600, color: INK, lineHeight: 1.45 }}>Initial simulated state</Text>
             <Box style={{ width: 441, height: 1, background: '#E6EBF3', marginTop: 14, marginBottom: 14 }} />
 
             {READOUT.map((r, i) => (
@@ -47,16 +43,15 @@ const READOUT = [
             ))}
 
             <Text style={{ fontSize: 16, color: BODY, lineHeight: 1.6, marginTop: 20 }}>
-                Every figure above is read from Cloud Firestore when the page loads, and the header says so.
-                The shift itself starts from a button: this build is a static site with no resident process, so a
-                real deployment would have a scheduler fire it.
+                The deployed application reads simulated node documents from Cloud Firestore.
+                A human starts each patrol. Scheduled operation would require a scheduler integration.
             </Text>
         </Box>
 
     </Box>
 
     <Box style={{ width: 1136, height: 48, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-        <Text style={{ fontSize: 14, color: DIM }}>Captured from the deployed page at gpu-waste-auditor-2026.web.app</Text>
-        <Text style={{ fontFamily: MONO, fontSize: 14, color: DIM }}>07 / 14</Text>
+        <Text style={{ fontSize: 14, color: DIM }}>Local English capture preserves the initial clean state</Text>
+        <Text style={{ fontFamily: MONO, fontSize: 14, color: DIM }}>07 / 15</Text>
     </Box>
 </Slide>

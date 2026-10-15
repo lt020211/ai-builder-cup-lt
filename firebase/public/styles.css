@@ -1,33 +1,19 @@
-/* ============================================================================
-   训练故障分诊器 · 界面样式（D · 单栏工作台）
-   ----------------------------------------------------------------------------
-   设计约定（改样式前先读这一段，不然很容易把它改回「一堆圆角白卡 + 彩色徽章」）：
-     · 深底、单栏、大字号：演示视频在 1600×900 取景时最好读
-     · 数字一律等宽 + tabular-nums，同一列的数字必须对得齐
-     · 分区靠**发丝分隔线**，不靠卡片外框；只有需要「独立成块」的东西才给底
-     · 颜色只用来表达状态（健康/警告/危险），不用来装饰
-     · 「无数据」与 0 必须视觉可区分（缺数据用 —，零就是 0）
-   ----------------------------------------------------------------------------
-   ★ 这个文件里有一部分变量名是 **JS 直接引用的**，改名前先搜一遍：
-       app.js 里内联样式的 var(--warn) / var(--ok) / var(--mid)
-       renderActionsTab 里 var(--low) / var(--medium) / var(--high)
-     改掉这几个名字，界面上那几处颜色会静默失效（不报错、只是变默认色）。
-   ============================================================================ */
+/* Training Failure Triage styles. Dark, single-column workspace for readable demos. Use tabular numbers, thin separators, and status colors. Distinguish missing data from zero. Keep JS-referenced CSS variables stable: --warn, --ok, --mid, --low, --medium, and --high. */
 
 :root{
-  /* 底色与面板 */
+  /* Background and panels. */
   --bg:#090c12;      --topbg:#0b1017;   --panel:#0f1622;  --panel2:#0c121c;
   --line:#1d2836;    --line2:#161f2b;   --hover:#121a26;
-  /* 文字 */
+  /* Text. */
   --fg:#eaf0f8;      --dim:#98a6bb;     --dim2:#62728c;
-  /* 状态色 */
+  /* Status colors. */
   --accent:#5b95ff;  --ok:#33d69a;      --warn:#f5b03f;   --bad:#ff6b78;
   --mid:#f5b03f;
   --okbg:rgba(51,214,154,.10);    --okbd:rgba(51,214,154,.38);
   --warnbg:rgba(245,176,63,.10);  --warnbd:rgba(245,176,63,.38);
   --badbg:rgba(255,107,120,.10);  --badbd:rgba(255,107,120,.40);
   --accbg:rgba(91,149,255,.12);   --accbd:rgba(91,149,255,.40);
-  /* 风险等级（JS 用 var(--low) 之类取色） */
+  /* Risk colors referenced by JS. */
   --low:#33d69a;     --medium:#f5b03f;  --high:#ff6b78;
   --lowbg:rgba(51,214,154,.10);    --mediumbg:rgba(245,176,63,.10);
   --highbg:rgba(255,107,120,.10);
@@ -53,7 +39,7 @@ code{font:12px ui-monospace,Menlo,monospace;background:var(--codebg);
   padding:1px 5px;border-radius:4px;color:#b9c8dd}
 .app{min-height:100vh;display:flex;flex-direction:column}
 
-/* ---------------------------------------------------------------- 顶栏 */
+/* Top bar. */
 .topbar{display:flex;align-items:center;gap:24px;height:56px;padding:0 24px;
   background:var(--topbg);border-bottom:1px solid var(--line);
   position:sticky;top:0;z-index:9}
@@ -78,26 +64,22 @@ code{font:12px ui-monospace,Menlo,monospace;background:var(--codebg);
 
 main{flex:1;width:100%;max-width:var(--mw);margin:0 auto;
   padding:26px 24px 56px;display:flex;flex-direction:column;gap:var(--gap)}
-/* ★ 标签面板必须能当 flex 子项收缩，否则里面的横向滚动表格会把整页撑宽 */
+/* Allow tab panels to shrink so tables scroll without widening the page. */
 .tab{display:flex;flex-direction:column;gap:var(--gap);min-width:0}
 .tab[hidden]{display:none}
-/* #case-result 用内联 style 控制显隐（app.js 会写 display:'block'），
-   所以它自己不能是 flex —— 间距交给里面这层。 */
+/* app.js controls #case-result display inline; its inner wrapper provides flex spacing. */
 .tabbody{display:flex;flex-direction:column;gap:var(--gap)}
 
-/* ---------------------------------------------------------------- 页头 */
+/* Page heading. */
 .pagehead{display:flex;align-items:flex-end;justify-content:space-between;
   gap:24px;flex-wrap:wrap;padding-top:4px}
 .pagehead h1{margin:0 0 6px;font-size:24px;font-weight:600;letter-spacing:.2px}
 .lede{margin:0;max-width:760px;font-size:14px;color:var(--dim);line-height:1.7}
 .phact{display:flex;align-items:center;gap:9px;flex-wrap:wrap}
-/* 值班页头的状态提示（#patrol-status）。最长的一句是
-   「完成，但有一条动作回验未通过，见操作日志」——不设宽度上限的话，
-   它会跟三个按钮抢同一行，把按钮挤成竖排。给它一个上限让它自己换行。
-   注意这句是被 app.js 动态写入的：`setStatus('#patrol-status', …)`。 */
+/* Page heading. */
 .phact #patrol-status{max-width:340px;text-align:right;margin-left:2px}
 
-/* ---------------------------------------------------------------- 控件 */
+/* Controls. */
 button{font:inherit;font-size:13.5px;padding:9px 17px;border-radius:var(--r-sm);
   border:1px solid var(--accent);background:var(--accent);color:#fff;
   cursor:pointer;transition:filter .12s}
@@ -121,7 +103,7 @@ label.chk{display:flex;align-items:center;gap:7px;font-size:12.5px;
   color:var(--dim);cursor:pointer}
 .bar{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
 
-/* ---------------------------------------------------------------- KPI 条 */
+/* KPI strip. */
 .kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:var(--gap)}
 .kpi{background:var(--panel);border:1px solid var(--line);border-radius:var(--r);
   padding:16px 17px 17px;
@@ -148,7 +130,7 @@ label.chk{display:flex;align-items:center;gap:7px;font-size:12.5px;
 .schip.warn{color:var(--warn);border-color:var(--warnbd);background:var(--warnbg)}
 .schip.ok{color:var(--ok);border-color:var(--okbd);background:var(--okbg)}
 
-/* ---------------------------------------------------------------- 面板 */
+/* Panels. */
 .panel{background:var(--panel);border:1px solid var(--line);
   border-radius:var(--r);overflow:hidden;min-width:0}
 .ph{display:flex;align-items:baseline;gap:12px;justify-content:space-between;
@@ -161,14 +143,14 @@ label.chk{display:flex;align-items:center;gap:7px;font-size:12.5px;
 .pb{padding:14px 18px 18px;min-width:0}
 .pb.tight{padding-top:6px}
 
-/* 提示条：说明「这条边界是什么」，不参与数据呈现 */
+/* Boundary notices. */
 .notice{border:1px solid var(--line);border-left:3px solid var(--warn);
   background:var(--panel2);border-radius:var(--r-sm);padding:13px 15px;
   font-size:12.5px;color:var(--dim);line-height:1.75}
 .notice b{color:var(--fg);font-weight:600}
 .notice code{font-size:11.5px}
 
-/* ---------------------------------------------------------------- 结论卡 */
+/* Decision card. */
 .verdict{display:grid;grid-template-columns:200px 1fr;gap:22px;
   align-items:start}
 .verdict .big{border:1px solid var(--line);background:var(--panel2);
@@ -186,7 +168,7 @@ label.chk{display:flex;align-items:center;gap:7px;font-size:12.5px;
   border-radius:99px;overflow:hidden;vertical-align:middle}
 .confbar i{display:block;height:100%;background:var(--accent)}
 
-/* ---------------------------------------------------------------- 证据格 */
+/* Evidence grid. */
 .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));
   gap:10px}
 .ev{background:var(--panel2);border:1px solid var(--line);
@@ -202,7 +184,7 @@ label.chk{display:flex;align-items:center;gap:7px;font-size:12.5px;
 .chip.ref{color:var(--accent);border-color:var(--accbd);background:var(--accbg);
   font-family:ui-monospace,Menlo,monospace}
 
-/* ---------------------------------------------------------------- 工具轨迹 */
+/* Tool trace. */
 .tools{margin:0;padding:0;list-style:none;
   font:12px/1.6 ui-monospace,SFMono-Regular,Menlo,monospace}
 .tools li{display:grid;grid-template-columns:230px 1fr;gap:14px;
@@ -212,7 +194,7 @@ label.chk{display:flex;align-items:center;gap:7px;font-size:12.5px;
 .tools b{color:var(--accent);font-weight:500;white-space:nowrap}
 .tools span{color:var(--dim2);word-break:break-all}
 
-/* ---------------------------------------------------------------- 动作卡 */
+/* Action cards. */
 .acts{display:flex;flex-direction:column;gap:10px}
 .act{border:1px solid var(--line);border-left:3px solid var(--line);
   border-radius:var(--r-sm);padding:13px 15px;background:var(--panel2)}
@@ -221,7 +203,7 @@ label.chk{display:flex;align-items:center;gap:7px;font-size:12.5px;
 .act.high{border-left-color:var(--high)}
 .act.done{border-color:var(--okbd);background:var(--okbg)}
 .act.rejected{opacity:.62}
-/* 明确不建议的动作：灰显但**仍然可读** —— 让人看清它是什么，只是不可选 */
+/* Keep discouraged actions readable while muted. */
 .act.muted{opacity:.62;background:var(--panel)}
 .act .hd{display:flex;gap:8px;align-items:center;flex-wrap:wrap;
   margin-bottom:8px}
@@ -243,10 +225,8 @@ label.chk{display:flex;align-items:center;gap:7px;font-size:12.5px;
 .approve-box{border-top:1px dashed var(--line);margin-top:12px;padding-top:12px;
   display:grid;gap:8px}
 
-/* ---------------------------------------------------------------- 集群节点 */
-/* 单栏横向整行：名字 / 规格 · 状态 · 任务 / 异常信号
-   ★ 子元素顺序由 app.js 的 nodeCard 决定：.n → .s（规格·状态）→ .s.job（任务，
-     可能没有）→ .sig 或 .cordon。所以这三列用显式 grid 定位，不靠自动排版。 */
+/* Cluster nodes. */
+/* Explicit grid placement supports optional job rows from nodeCard. */
 .nodes{display:flex;flex-direction:column}
 .node{display:grid;grid-template-columns:212px 1fr minmax(0,300px);
   grid-template-rows:auto auto;gap:3px 18px;align-items:baseline;
@@ -266,7 +246,7 @@ label.chk{display:flex;align-items:center;gap:7px;font-size:12.5px;
 .node .cordon{grid-column:2 / span 2;grid-row:2;font-size:12px;
   color:var(--ok)}
 
-/* ---------------------------------------------------------------- 操作日志 */
+/* Operation log. */
 .log{margin:0;padding:0;list-style:none;display:flex;flex-direction:column;
   gap:2px}
 .log li{border-left:2px solid var(--line);padding:7px 0 7px 13px;
@@ -277,7 +257,7 @@ label.chk{display:flex;align-items:center;gap:7px;font-size:12.5px;
 .log .tm{color:var(--dim2);font:11px ui-monospace,Menlo,monospace}
 .log .tx{margin-top:2px}
 
-/* ---------------------------------------------------------------- 工单 / 通知 */
+/* Tickets and notifications. */
 .stack{display:flex;flex-direction:column;gap:10px}
 .stack:empty{display:none}
 .tk{border:1px solid var(--line);border-radius:var(--r-sm);padding:12px 14px;
@@ -287,7 +267,7 @@ label.chk{display:flex;align-items:center;gap:7px;font-size:12.5px;
 .tk .b{color:var(--dim);font-size:12.5px;line-height:1.75;
   white-space:pre-wrap;word-break:break-word}
 
-/* ---------------------------------------------------------------- 基准对照 */
+/* Benchmark. */
 .bench{display:grid;grid-template-columns:1fr 1fr;gap:var(--gap);
   margin-bottom:16px}
 .benchcard{border:1px solid var(--line);border-radius:var(--r-sm);
@@ -297,7 +277,7 @@ label.chk{display:flex;align-items:center;gap:7px;font-size:12.5px;
   font-variant-numeric:tabular-nums}
 .benchcard.ai{border-color:var(--accbd);background:var(--accbg)}
 
-/* ---------------------------------------------------------------- 表格 */
+/* Tables. */
 table{width:100%;border-collapse:collapse;font-size:12.5px}
 th,td{text-align:left;padding:9px 11px;border-bottom:1px solid var(--line2);
   vertical-align:top}
@@ -308,20 +288,10 @@ tbody tr:hover td{background:var(--hover)}
 tbody tr:last-child td{border-bottom:none}
 tr.miss td{background:var(--badbg)}
 td.mono{font-family:ui-monospace,Menlo,monospace;font-size:11.5px}
-/* 表格外面这层负责横向滚动，别让长命令把整页撑宽 */
+/* The wrapper scrolls horizontally to contain long commands. */
 .tablewrap{overflow-x:auto;margin:0 -2px}
 
-/* ★ 动作库那张表必须钉死列宽。
-   默认的 auto 布局会按内容分配：命令列里是一行长命令、旁边几列是短文，
-   结果浏览器把命令列压到 ~130px，一条 export 语句被断成每行十来字符，
-   完全没法读。fixed 布局 + 百分比列宽才不会随内容漂。
-   列宽按各列**实际内容**定，不是平均分：
-     · 动作   label 最长「禁止节点接新任务（cordon）」+ 等宽 id →  17%
-     · 等级   只有一枚徽章「中风险」                            →   8%
-     · 影响面 最长「该节点上正在使用该卡的进程」                →  13%
-     · 命令   多行 shell 脚本，最需要宽度，所以给到最大          →  27%
-     · 预期输出 / 回滚  各是一句话                             →  18% / 17%
-   （改动这一行之前先看渲染结果 —— 内联宽度会被这里覆盖，反过来也一样。） */
+/* Use fixed column widths for readable commands. Action, risk, impact, command, output, and rollback columns retain 17%, 8%, 13%, 27%, 18%, and 17% respectively. */
 #action-tbl{table-layout:fixed;min-width:1080px}
 #action-tbl th:nth-child(1),#action-tbl td:nth-child(1){width:17%}
 #action-tbl th:nth-child(2),#action-tbl td:nth-child(2){width:8%}
@@ -329,20 +299,19 @@ td.mono{font-family:ui-monospace,Menlo,monospace;font-size:11.5px}
 #action-tbl th:nth-child(4),#action-tbl td:nth-child(4){width:27%}
 #action-tbl th:nth-child(5),#action-tbl td:nth-child(5){width:18%}
 #action-tbl th:nth-child(6),#action-tbl td:nth-child(6){width:17%}
-/* 命令格自己只管换行，不再管宽度。
-   字号比其它格小一号：这里一行要塞下尽可能多的 shell 字符。 */
+/* Command cells control wrapping; column widths are defined above. */
 #action-tbl td.cmd{white-space:pre-wrap;word-break:break-all;
   font-size:11px;line-height:1.62;color:#b9c8dd}
 #bench-tbl{min-width:920px}
 
-/* ---------------------------------------------------------------- 代码块 */
+/* Code blocks. */
 pre{white-space:pre-wrap;word-break:break-word;margin:0}
 pre.ai{font:13px/1.85 inherit;color:var(--fg)}
 pre.cmd{background:#060a10;color:#cfe0f5;border:1px solid var(--line);
   padding:11px 13px;border-radius:var(--r-sm);overflow-x:auto;
   font:11.5px/1.75 ui-monospace,Menlo,monospace;margin:8px 0}
 
-/* ---------------------------------------------------------------- 响应式 */
+/* Responsive layout. */
 @media(max-width:1080px){
   .kpis{grid-template-columns:repeat(2,1fr)}
   .grid2,.bench{grid-template-columns:1fr}

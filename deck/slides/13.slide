@@ -1,4 +1,4 @@
-// 13 · 五层，一条规矩 —— 左架构堆叠 + 右单条纪律
+// 13: five architecture layers and code responsibilities.
 const FONT = 'Inter, "Helvetica Neue", Arial, sans-serif';
 const MONO = '"JetBrains Mono", "SF Mono", Menlo, monospace';
 const INK = '#0B1220';
@@ -8,16 +8,16 @@ const DIM = '#64748B';
 const BODY = '#1A2434';
 
 const LAYERS = [
-    { no: '01', t: 'Knowledge base', d: '24 Xid entries · 27 failure signatures · 6 diagnostic principles' },
-    { no: '02', t: 'Deterministic pre-analysis', d: 'version stack, memory accounting, structured facts — no model involved' },
-    { no: '03', t: 'Tools', d: '10 registered · 6 exposed in single triage · 10 in shift patrol' },
-    { no: '04', t: 'Model loop', d: 'Gemini · at most 12 tool turns · calls already made are carried over if the model is swapped mid-shift' },
-    { no: '05', t: 'Execution', d: 'low risk only, then the value is re-read and logged' },
+    { no: '01', t: 'Knowledge base', d: '24 Xid entries, 27 failure signatures and 6 diagnostic principles' },
+    { no: '02', t: 'Deterministic pre-analysis', d: 'Local compatibility checks and memory accounting produce structured facts' },
+    { no: '03', t: 'Tools', d: '10 registered tools, with 6 available for cases and all 10 for patrol' },
+    { no: '04', t: 'Model loop', d: 'Gemini allows up to 12 turns per attempt. Fallback retains completed calls.' },
+    { no: '05', t: 'Execution', d: 'Automatic actions require low risk. The app checks state and records the result.' },
 ];
 
 <Slide style={{ width: 1280, height: 720, padding: '18px 72px', background: '#FFFFFF', fontFamily: FONT }}>
     <Box style={{ width: 1136, height: 92, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end' }}>
-        <Text style={{ fontSize: 34, fontWeight: 700, color: INK, lineHeight: 1.3 }}>Five layers, one rule</Text>
+        <Text style={{ fontSize: 34, fontWeight: 700, color: INK, lineHeight: 1.3 }}>Application architecture</Text>
         <Text style={{ fontFamily: MONO, fontSize: 14, color: DIM, lineHeight: 1.45 }}>Architecture</Text>
     </Box>
 
@@ -41,25 +41,25 @@ const LAYERS = [
         </Box>
 
         <Box style={{ width: 396 }}>
-            <Text style={{ fontSize: 22, fontWeight: 600, color: INK, lineHeight: 1.45 }}>One rule, enforced twice</Text>
+            <Text style={{ fontSize: 22, fontWeight: 600, color: INK, lineHeight: 1.45 }}>Prompt and code responsibilities</Text>
             <Text style={{ fontSize: 16, color: BODY, lineHeight: 1.65, marginTop: 14, width: 396 }}>
-                Numbers must come from a tool. Risk levels must come from the action library.
-                The model is not allowed to declare either one.
+                The prompt requires tool evidence for numerical claims. The action library supplies risk levels
+                for the action IDs the model selects.
             </Text>
             <Text style={{ fontSize: 16, color: BODY, lineHeight: 1.65, marginTop: 14, width: 396 }}>
-                Both rules are written in the prompt and re-checked in code. The prompt exists so the model
-                understands the system; the code is what makes the rule hold.
+                Code limits available tools and rejects automatic execution above low risk.
+                Citation checks remove unknown references from proposed actions.
             </Text>
             <Box style={{ width: 396, height: 1, background: '#E6EBF3', marginTop: 22, marginBottom: 22 }} />
             <Text style={{ fontSize: 19, fontWeight: 700, color: INK, lineHeight: 1.5, width: 396 }}>
-                Prompt rules can be argued with.<br />Code cannot.
+                Medium and high risk actions require operator approval
             </Text>
         </Box>
 
     </Box>
 
     <Box style={{ width: 1136, height: 48, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-        <Text style={{ fontSize: 14, color: DIM }}>A mode is a capability boundary: the tool list is cut to the mode before the loop starts</Text>
-        <Text style={{ fontFamily: MONO, fontSize: 14, color: DIM }}>13 / 14</Text>
+        <Text style={{ fontSize: 14, color: DIM }}>The app selects each mode's tool list before the model loop starts</Text>
+        <Text style={{ fontFamily: MONO, fontSize: 14, color: DIM }}>13 / 15</Text>
     </Box>
 </Slide>

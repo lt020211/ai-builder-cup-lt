@@ -1,4 +1,4 @@
-// 11 · 章节扉页 03 —— 深底 + 网格 + 巨型「11 / 14」
+// 11: evidence section with the joint F8 rule score.
 const FONT = 'Inter, "Helvetica Neue", Arial, sans-serif';
 const MONO = '"JetBrains Mono", "SF Mono", Menlo, monospace';
 const BLUE = '#2F6BFF';
@@ -31,17 +31,18 @@ const GRID_Y = [0, 64, 128, 192, 256, 320, 384, 448, 512, 576];
 
         <Box style={{ position: 'relative', width: 760, height: 576, justifyContent: 'center', gap: 18 }}>
             <Text style={{ fontFamily: MONO, fontSize: 14, color: BLUE, letterSpacing: 3 }}>CHAPTER 03</Text>
-            <Text style={{ fontSize: 64, fontWeight: 700, color: '#FFFFFF', lineHeight: 1.1 }}>Evidence &amp; boundaries</Text>
-            <Text style={{ fontSize: 24, color: '#94A3B8', lineHeight: 1.5 }}>Reproducible numbers, stated limits</Text>
+            <Text style={{ fontSize: 64, fontWeight: 700, color: '#FFFFFF', lineHeight: 1.1 }}>Evidence and limits</Text>
+            <Text style={{ fontSize: 24, color: '#94A3B8', lineHeight: 1.5 }}>A rule benchmark on 14 constructed cases</Text>
             <Box style={{ width: 88, height: 3, background: 'rgba(255,255,255,0.28)', marginTop: 14 }} />
             <Text style={{ fontSize: 18, color: '#C7D2E0', lineHeight: 1.65, width: 740 }}>
-                Every number in this chapter can be rerun from a script in the repository. Where we never ran a
-                case, the table shows a blank rather than a plausible value.
+                F8 requires both the classification and RMA decision to match the expected result.
+                The rule baseline scores 11/14. The constructed case set does not establish production accuracy,
+                and this submission reports no aggregate AI score.
             </Text>
         </Box>
 
         <Box style={{ position: 'absolute', left: 0, bottom: 0, width: 1136, flexDirection: 'row', justifyContent: 'flex-end' }}>
-            <Text style={{ fontFamily: MONO, fontSize: 14, color: 'rgba(255,255,255,0.45)' }}>11 / 14</Text>
+            <Text style={{ fontFamily: MONO, fontSize: 14, color: 'rgba(255,255,255,0.45)' }}>11 / 15</Text>
         </Box>
 
     </Box>

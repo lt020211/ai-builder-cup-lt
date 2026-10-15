@@ -1,30 +1,11 @@
 #!/usr/bin/env python3
-"""给演示视频配英语旁白音轨。
+"""Fit English narration to the recorded beat windows.
 
-为什么要单独一个脚本、而不是在合成脚本里顺手合成语音：
-
-1. **旁白要跟着画面走，不能反过来。** 每一拍该说多久，是由 `timeline.json` 里那一拍
-   真实花了多少秒决定的（那是一次真的巡检、不是摆拍）。所以顺序必须是
-   「先录 → 拿到真实时间窗 → 再决定这段话要按什么语速说」，而不是「先说好再剪画面」。
-2. **旁白文本与字幕文本是同一份来源。** `shots-demo/beats.json` 里每一拍同时有
-   `caption`（英文字幕）、`zh`（中文字幕）、`voice`（口播）三条，它们是同一件事的三种写法：
-   字幕可以写缩写与并列，念出来要成句。改文案只改 `record_demo.mjs` 的 BEATS，
-   重跑 `--dump-beats` 即可，不必碰这个脚本。
-3. **语速必须逐条实测。** 神经音色的语速因内容差异很大（同样的词数，数字多的句子会明显慢），
-   按词数估算是估不准的。这个脚本的做法是「先按默认语速合成 → 量出真实时长 →
-   算出为了装进时间窗需要的语速 → 再合成一遍」。
-
-装不下怎么办：只允许两种手段，且都有上限 —— 先调 edge-tts 的 `rate`（±20%/35% 封顶），
-仍超出才用 ffmpeg 的 `atempo` 收尾。**不允许把一段话硬压成快放**，那听起来像广告，
-而且评审会怀疑画面是为了对上口播才放慢的。
-
-本机没有 numpy，所以拼接走 ffmpeg 的 `apad` + concat demuxer（每个音段补齐到它那一拍的
-精确秒数，再顺序拼起来），不做任何浮点混音。
-
-用法：
-    python3 scripts/demo_voice.py [--dir shots-demo] [--voice en-US-AndrewNeural]
-                                  [--out shots-demo/voice.m4a] [--keep-segments] [--probe]
-"""
+Read caption, zh, and voice text from beats.json and timing from timeline.json.
+Measure synthesized clips, adjust speech rate, then apply atempo if needed.
+Cache synthesized clips unless --fresh is passed.
+Usage: python3 scripts/demo_voice.py [--dir shots-demo] [--voice en-US-AndrewNeural]
+                                   [--out shots-demo/voice.m4a] [--keep-segments] [--probe]"""
 
 from __future__ import annotations
 
@@ -42,32 +23,31 @@ try:
 except Exception:  # pragma: no cover
     FFMPEG = shutil.which("ffmpeg")
 if not FFMPEG:
-    sys.exit("找不到 ffmpeg：pip install imageio-ffmpeg 或装一个系统 ffmpeg")
+    sys.exit("ffmpeg not found: pip install imageio-ffmpeg or install system ffmpeg")
 
 try:
     import edge_tts
 except Exception:  # pragma: no cover
-    sys.exit("找不到 edge-tts：pip install edge-tts")
+    sys.exit("edge-tts not found: pip install edge-tts")
 
 SR = 48000
 
-# 每段旁白在它那一拍里的位置：稍微晚一点起、留一点尾，听起来不像踩点播报。
+# Leave silence before and after each beat's narration.
 LEAD = 0.35
 TAIL = 0.45
 
-# 希望一段话占掉可用时长的比例。太低显得空，太满显得赶。
+# Target fraction of the available narration window.
 FILL = 0.90
 
-# 语速调整的封顶。这两个数就是本片的念白节奏政策，宁可在头尾留一点静音，
-# 也不把一段话拧成快放 —— 一旦调过头，评审会怀疑画面是为了对上口播才放慢的。
+# Bound speech-rate adjustments before applying atempo.
 RATE_MIN, RATE_MAX = -15, 30
 
-# 一次合成里，最多允许多少条语音任务同时在跑（edge-tts 是走网络的，开太多会被限流）
+# Limit simultaneous network synthesis requests.
 CONCURRENCY = 4
 
 
 def ff_duration(path: Path) -> float:
-    """用 ffmpeg 读时长（本机没有 ffprobe，imageio-ffmpeg 只带 ffmpeg）。"""
+    """Read duration from ffmpeg output; no ffprobe is required."""
     r = subprocess.run([FFMPEG, "-hide_banner", "-i", str(path)],
                        capture_output=True, text=True)
     for line in r.stderr.splitlines():
@@ -79,7 +59,7 @@ def ff_duration(path: Path) -> float:
 
 
 async def synth(text: str, voice: str, rate_pct: int, out: Path) -> None:
-    """合成一段语音。rate_pct 是相对默认语速的百分比，例如 +12 / -8。"""
+    """Synthesize one clip; rate_pct is relative to the default speech rate."""
     rate = f"{rate_pct:+d}%" if rate_pct else "+0%"
     comm = edge_tts.Communicate(text, voice, rate=rate)
     await comm.save(str(out))
@@ -95,13 +75,13 @@ async def synth_retry(text: str, voice: str, rate_pct: int, out: Path,
         except Exception as e:  # noqa: BLE001
             if n == tries:
                 raise
-            print(f"      合成失败（{e}），{n}/{tries} 重试…")
+            print(f"      Synthesis failed ({e}); retry {n}/{tries}...")
         await asyncio.sleep(1.2 * n)
-    raise RuntimeError(f"合成失败：{text[:40]}")
+    raise RuntimeError(f"Synthesis failed: {text[:40]}")
 
 
 def atempo_chain(factor: float) -> str:
-    """ffmpeg 单个 atempo 只吃 0.5–2.0，超出就串起来。"""
+    """Chain atempo filters so each factor stays within 0.5 to 2.0."""
     parts: list[float] = []
     f = factor
     while f > 2.0:
@@ -116,17 +96,13 @@ def atempo_chain(factor: float) -> str:
 
 def fit_one(seg_dir: Path, i: int, beat_id: str, text: str, voice: str,
             window: float, fresh: bool = False) -> dict:
-    """把一拍的话装进它那一拍的时间窗，返回这一段的实测结果。
-
-    `raw0`（默认语速那一版）会留在盘上：调节奏常量时重跑，第一遍合成可以直接复用，
-    不必为了看一眼数字再打一次网络。要重来加 `--fresh`。
-    """
+    """Fit narration to its beat window and return measured timing. Cache the default-rate clip unless fresh is set."""
     usable = max(1.0, window - LEAD - TAIL)
     raw0 = seg_dir / f"{i:02d}-{beat_id}-raw0.mp3"
     raw = seg_dir / f"{i:02d}-{beat_id}-raw.mp3"
     fin = seg_dir / f"{i:02d}-{beat_id}.mp3"
 
-    # 第一遍：按默认语速合成，量出真实时长
+
     if raw0.exists() and raw0.stat().st_size > 1200 and not fresh:
         dur0 = ff_duration(raw0)
     else:
@@ -136,7 +112,7 @@ def fit_one(seg_dir: Path, i: int, beat_id: str, text: str, voice: str,
     want = dur0
     rate_pct = 0
     if dur0 > 0:
-        desired = dur0 / (usable * FILL)          # >1 需要变快，<1 可以放慢
+        desired = dur0 / (usable * FILL)
         rate_pct = round((desired - 1) * 100)
         rate_pct = max(RATE_MIN, min(RATE_MAX, rate_pct))
         if abs(rate_pct) < 5:
@@ -154,7 +130,7 @@ def fit_one(seg_dir: Path, i: int, beat_id: str, text: str, voice: str,
         shutil.copyfile(raw0, raw)
         dur1 = dur0
 
-    # 第二遍之后还超出可用时长，才动用 atempo（有上限，且会记录下来说明了它）
+
     tempo = 1.0
     if dur1 > usable:
         tempo = dur1 / usable
@@ -162,7 +138,7 @@ def fit_one(seg_dir: Path, i: int, beat_id: str, text: str, voice: str,
                "-i", str(raw), "-af", atempo_chain(tempo),
                "-ac", "1", "-ar", str(SR), str(fin)]
         if subprocess.run(cmd, capture_output=True).returncode != 0:
-            raise RuntimeError(f"atempo 失败：{beat_id}")
+            raise RuntimeError(f"atempo failed: {beat_id}")
     else:
         shutil.copyfile(raw, fin)
 
@@ -178,11 +154,11 @@ def fit_one(seg_dir: Path, i: int, beat_id: str, text: str, voice: str,
 
 def build_segments(seg_dir: Path, beats: list[dict], tl: list[dict],
                    total: float, fps: int) -> Path:
-    """把每段旁白补齐到它那一拍的精确秒数，再顺序拼成一条与视频等长的音轨。"""
+    """Pad each clip to its beat window and concatenate an audio track matching the video duration."""
     t0_first = tl[0]["t0"]
     parts: list[Path] = []
 
-    # 开场前的静音（第一拍从 0.1s 才开始）
+
     if t0_first > 0.02:
         lead = seg_dir / "00-lead.wav"
         _silence(lead, t0_first)
@@ -193,7 +169,7 @@ def build_segments(seg_dir: Path, beats: list[dict], tl: list[dict],
         window = round(t["t1"] - t["t0"], 3)
         seg = seg_dir / f"{i:02d}-{b['id']}.mp3"
         wav = seg_dir / f"seg{i:02d}.wav"
-        # apad 补到 window，-t 再切到 window：两侧都锁死，拼出来不会有缝
+
         cmd = [FFMPEG, "-y", "-hide_banner", "-loglevel", "error",
                "-i", str(seg),
                "-af", f"adelay={int(LEAD * 1000)}|{int(LEAD * 1000)},"
@@ -202,11 +178,11 @@ def build_segments(seg_dir: Path, beats: list[dict], tl: list[dict],
                "-t", str(window), "-ac", "2", "-ar", str(SR),
                "-c:a", "pcm_s16le", str(wav)]
         if subprocess.run(cmd, capture_output=True).returncode != 0:
-            raise RuntimeError(f"补齐音段失败：{b['id']}")
+            raise RuntimeError(f"Failed to pad audio segment: {b['id']}")
         parts.append(wav)
         cursor += window
 
-    # 尾部补齐：视频总长 - 已经铺好的长度
+
     if cursor < total - 0.02:
         tail = seg_dir / "99-tail.wav"
         _silence(tail, total - cursor)
@@ -223,29 +199,29 @@ def _silence(path: Path, seconds: float) -> None:
            "-i", f"anullsrc=channel_layout=stereo:sample_rate={SR}",
            "-c:a", "pcm_s16le", str(path)]
     if subprocess.run(cmd, capture_output=True).returncode != 0:
-        raise RuntimeError(f"生成静音段失败：{path.name}")
+        raise RuntimeError(f"Failed to generate silence: {path.name}")
 
 
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--dir", default="shots-demo")
     ap.add_argument("--voice", default="en-US-AndrewNeural",
-                    help="edge-tts 音色名（默认 en-US-AndrewNeural）")
-    ap.add_argument("--out", default="", help="默认 <dir>/voice.m4a")
-    ap.add_argument("--keep-segments", action="store_true", help="保留逐拍音频，便于试听")
+                    help="edge-tts voice name (default: en-US-AndrewNeural)")
+    ap.add_argument("--out", default="", help="Default: <dir>/voice.m4a")
+    ap.add_argument("--keep-segments", action="store_true", help="Keep per-beat audio clips for review")
     ap.add_argument("--fresh", action="store_true",
-                    help="丢弃已缓存的合成结果重新合成（默认复用，方便反复调节奏）")
+                    help="Synthesize again instead of reusing cached clips")
     ap.add_argument("--probe", action="store_true",
-                    help="只量语速与时间窗，不写最终音轨")
+                    help="Measure speech rate and beat windows without writing the final track")
     args = ap.parse_args()
 
     src = Path(args.dir)
     beats_path = src / "beats.json"
     tl_path = src / "timeline.json"
     if not beats_path.exists():
-        sys.exit(f"缺 {beats_path}：先跑 node scripts/record_demo.mjs --dump-beats --calls=N")
+        sys.exit(f"Missing {beats_path}: run node scripts/record_demo.mjs --dump-beats --calls=N first")
     if not tl_path.exists():
-        sys.exit(f"缺 {tl_path}：先跑 node scripts/record_demo.mjs")
+        sys.exit(f"Missing {tl_path}: run node scripts/record_demo.mjs first")
 
     beats_all = json.loads(beats_path.read_text())["beats"]
     tl_doc = json.loads(tl_path.read_text())
@@ -253,18 +229,18 @@ def main() -> None:
     total = tl_doc["duration"]
     fps = tl_doc.get("fps", 15)
 
-    # 以 timeline 的拍为准（它是真实录到的），文案按 id 去 beats.json 取
+
     by_id = {b["id"]: b for b in beats_all}
     missing = [t["id"] for t in tl if t["id"] not in by_id]
     if missing:
-        sys.exit(f"★ timeline 里有拍在 beats.json 里找不到文案：{'、'.join(missing)}")
+        sys.exit(f"Timeline beats missing text in beats.json: {', '.join(missing)}")
     beats = [by_id[t["id"]] for t in tl]
 
     blank = [b["id"] for b in beats if not (b.get("voice") or b.get("caption"))]
     if blank:
-        sys.exit(f"★ 这些拍没有旁白文本：{'、'.join(blank)}")
+        sys.exit(f"Beats missing narration: {', '.join(blank)}")
 
-    print(f"拍数 {len(beats)} · 视频总长 {total:.1f}s · 音色 {args.voice}")
+    print(f"Beats {len(beats)}; video duration {total:.1f}s; voice {args.voice}")
 
     seg_dir = src / "voice"
     if seg_dir.exists() and args.fresh:
@@ -279,27 +255,27 @@ def main() -> None:
         rows.append(r)
         flag = ""
         if r["over"] > 0.05:
-            flag = f"  ★ 仍超出 {r['over']:.2f}s"
+            flag = f"  over by {r['over']:.2f}s"
         elif r["tempo"] > 1.001:
-            flag = f"  收尾 ×{r['tempo']:.2f}"
-        print(f"  {i + 1:>2}. {b['id']:8s} 窗 {r['window']:5.1f}s  "
-              f"念 {r['dur']:5.1f}s  语速 {r['rate_pct']:+3d}%{flag}")
+            flag = f"  atempo x{r['tempo']:.2f}"
+        print(f"  {i + 1:>2}. {b['id']:8s} window {r['window']:5.1f}s  "
+              f"speech {r['dur']:5.1f}s  rate {r['rate_pct']:+3d}%{flag}")
 
     bad = [r for r in rows if r["over"] > 0.15]
     if bad:
-        print("\n★ 这些拍念完仍然超出它那一拍的时间窗（会压到下一拍的头上）：")
+        print("\nNarration exceeds these beat windows and would overlap the next beat:")
         for r in bad:
-            print(f"    {r['id']}  超出 {r['over']:.2f}s  文本 {len(r['text'])} 字符")
-        print("  优先改短这几句文案（record_demo.mjs 的 BEATS → --dump-beats），"
-              "别继续往上加语速。")
+            print(f"    {r['id']}  over by {r['over']:.2f}s; text {len(r['text'])} characters")
+        print("  Shorten these lines in record_demo.mjs BEATS, then run --dump-beats. "
+              "Keep the current speech-rate limits.")
 
     slow = [r for r in rows if r["rate_pct"] <= RATE_MIN or r["rate_pct"] >= RATE_MAX]
     if slow:
-        print(f"\n  语速已顶到边界（{RATE_MIN}% ~ {RATE_MAX}%）的拍："
+        print(f"\n  Beats at speech-rate limits ({RATE_MIN}% to {RATE_MAX}%):"
               f"{'、'.join(r['id'] for r in slow)}")
 
     if args.probe:
-        print("\n（--probe：只量不改）")
+        print("\n(--probe: measurements only)")
         return
 
     listing = build_segments(seg_dir, beats, tl, total, fps)
@@ -309,12 +285,12 @@ def main() -> None:
            "-c:a", "aac", "-b:a", "128k", "-ac", "2", "-ar", str(SR),
            "-movflags", "+faststart", str(out)]
     if subprocess.run(cmd, capture_output=True).returncode != 0:
-        sys.exit("音轨编码失败")
+        sys.exit("Audio encoding failed")
 
     d = ff_duration(out)
     print(f"\n✓ {out}  {out.stat().st_size / 1024 / 1024:.2f} MB  {d:.2f}s"
-          f"  （视频 {total:.2f}s）")
-    print(f"  下一个命令：python3 scripts/demo_caption.py --dir {src} "
+          f"  (video {total:.2f}s)")
+    print(f"  Next command:python3 scripts/demo_caption.py --dir {src} "
           f"--out docs/Training-Failure-Triage-demo.mp4 --voice {out}")
 
     if not args.keep_segments:

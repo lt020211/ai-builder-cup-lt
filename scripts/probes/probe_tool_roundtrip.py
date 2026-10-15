@@ -1,27 +1,10 @@
 #!/usr/bin/env python3
-"""验证模型是否支持**完整的工具调用往返**，并据此决定前端的模型降级链。
+"""Check complete model/tool round trips for the model fallback list.
 
-为什么必须测往返：
-  最初只测「模型能否发出 functionCall」时，gemini-3.5-flash-lite 顺利通过
-  （2 次并行调用、1.5s）。可上真机却报：
-      400 Role 'function' is not supported.
-  也就是说它**能发不能收**——第二回合把工具结果回传时被拒。
-  只测「能发」会得出完全错误的结论。
-
-★ 关键发现（2026-10-14 实测）★
-  新版模型**不再接受 `role: "function"`**。服务端给出的合法角色是
-  SYSTEM / USER / ASSISTANT / DEVELOPER / CONTEXT / MODEL 等，没有 function。
-  把工具结果放进 `role: "user"` 的 functionResponse part 里，各模型都接受；
-  且 `role: "function"` 只有 gemini-3.1-flash-lite 还兼容。
-
-  → 这直接影响实现：Firebase AI Logic 的 JS SDK（ChatSession）**写死了
-    role: "function"**，所以在这些模型上第二回合必失败。前端因此改用
-    原生 fetch 直接打 REST，自己控制角色。
-
-判定标准：两个回合都 200，且第二回合产出**非空文本**（说明模型真的消化了工具结果）。
-
-用法：python3 scripts/probe_tool_roundtrip.py [model ...]
-"""
+Both turns must return HTTP 200, and the second must return nonempty text.
+Send functionResponse parts with role=user and preserve model parts, including
+thoughtSignature. Some models reject role=function.
+Usage: python3 scripts/probes/probe_tool_roundtrip.py [model ...]"""
 
 from __future__ import annotations
 
@@ -58,7 +41,7 @@ TOOLS = [
     }
 ]
 
-# 工具结果的回传角色。user 是实测唯一对所有模型都通用的写法。
+
 RESPONSE_ROLE = "user"
 
 
@@ -107,7 +90,7 @@ def probe(model: str) -> dict:
     t0 = time.time()
     status, data, raw = post(model, turn1)
     if status != 200:
-        out["error"] = f"第1回合 HTTP {status}: {raw[:200]}"
+        out["error"] = f"Turn 1 HTTP {status}: {raw[:200]}"
         return out
 
     cands = data.get("candidates") or []
@@ -115,10 +98,10 @@ def probe(model: str) -> dict:
     calls = [p["functionCall"] for p in parts if p.get("functionCall")]
     out["turn1_calls"] = [c.get("name") for c in calls]
     if not calls:
-        out["error"] = "第1回合没有 functionCall"
+        out["error"] = "Turn 1 returned no functionCall"
         return out
 
-    # 原样回传模型产出的 parts（含 thoughtSignature），工具结果放进 role=user
+
     turn2 = {
         "contents": turn1["contents"]
         + [
@@ -151,7 +134,7 @@ def probe(model: str) -> dict:
     status2, data2, raw2 = post(model, turn2)
     out["sec"] = round(time.time() - t0, 1)
     if status2 != 200:
-        out["error"] = f"第2回合 HTTP {status2}: {raw2[:220]}"
+        out["error"] = f"Turn 2 HTTP {status2}: {raw2[:220]}"
         return out
 
     cands2 = data2.get("candidates") or []
@@ -161,8 +144,8 @@ def probe(model: str) -> dict:
     out["ok"] = bool(text)
     if not text:
         out["error"] = (
-            f"第2回合 200 但文本为空（finishReason="
-            f"{cands2[0].get('finishReason') if cands2 else '?'}）"
+            f"Turn 2 HTTP 200 but text is empty (finishReason="
+            f"{cands2[0].get('finishReason') if cands2 else '?'})"
         )
     return out
 
@@ -179,17 +162,17 @@ if __name__ == "__main__":
             r = {"model": m, "ok": False, "error": f"{type(exc).__name__}: {exc}"}
         results.append(r)
         if r.get("ok"):
-            print(f"  ✅ 完整往返可用，{r['sec']}s，第2回合结论：{r['turn2_text'][:110]!r}")
+            print(f"  Round trip succeeded in {r['sec']}s; turn 2 response: {r['turn2_text'][:110]!r}")
         else:
-            print(f"  ❌ {r.get('error')}")
+            print(f"  Error: {r.get('error')}")
 
     print()
     print("=" * 78)
-    print(f"汇总（回传角色固定为 role=\"{RESPONSE_ROLE}\"）")
+    print(f"Summary (response role fixed to role=\"{RESPONSE_ROLE}\")")
     for r in results:
-        print(f"  {'✅' if r.get('ok') else '❌'} {r['model']:<24} "
+        print(f"  {'PASS' if r.get('ok') else 'FAIL'} {r['model']:<24} "
               f"{str(r.get('sec', '')) + 's' if r.get('sec') else ''}")
     usable = [r["model"] for r in results if r.get("ok")]
     print()
-    print("可用的模型（写入前端降级链的顺序）:")
+    print("Available models (frontend fallback order):")
     print("  " + json.dumps(usable, ensure_ascii=False))

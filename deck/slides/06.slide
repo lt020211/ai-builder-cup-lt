@@ -1,4 +1,4 @@
-// 06 · 章节扉页 02 —— 深底 + 网格 + 巨型「16」
+// 06: workflow section with the historical 17-call patrol measurement.
 const FONT = 'Inter, "Helvetica Neue", Arial, sans-serif';
 const MONO = '"JetBrains Mono", "SF Mono", Menlo, monospace';
 const BLUE = '#2F6BFF';
@@ -27,18 +27,19 @@ const GRID_Y = [0, 64, 128, 192, 256, 320, 384, 448, 512, 576];
 
         <Box style={{ position: 'relative', width: 840, height: 576, justifyContent: 'center', gap: 18 }}>
             <Text style={{ fontFamily: MONO, fontSize: 14, color: BLUE, letterSpacing: 3 }}>CHAPTER 02</Text>
-            <Text style={{ fontSize: 64, fontWeight: 700, color: '#FFFFFF', lineHeight: 1.1 }}>What we built</Text>
-            <Text style={{ fontSize: 24, color: '#94A3B8', lineHeight: 1.5 }}>An agent that runs a whole shift from a single click</Text>
+            <Text style={{ fontSize: 64, fontWeight: 700, color: '#FFFFFF', lineHeight: 1.1 }}>Application workflow</Text>
+            <Text style={{ fontSize: 24, color: '#94A3B8', lineHeight: 1.5 }}>A patrol starts with a human click</Text>
             <Box style={{ width: 88, height: 3, background: 'rgba(255,255,255,0.28)', marginTop: 14 }} />
             <Text style={{ fontSize: 18, color: '#C7D2E0', lineHeight: 1.65, width: 780 }}>
-                The shift recorded for our demo video made <span style={{ fontFamily: MONO, color: '#FFFFFF' }}>17</span> tool calls:
-                one cluster scan, six node reads, the knowledge-base lookups, then the write, the ticket and the notification.
-                The loop is capped at 12 turns, so a shift that runs long is continued from the calls already made instead of restarted.
+                The recorded demo patrol made <span style={{ fontFamily: MONO, color: '#FFFFFF' }}>17</span> tool calls.
+                It inspected six nodes and consulted the knowledge base before taking low risk actions.
+                Tickets remain drafts and notifications remain queued. Each model attempt allows up to 12 turns,
+                and fallback carries completed calls into the next attempt.
             </Text>
         </Box>
 
         <Box style={{ position: 'absolute', left: 0, bottom: 0, width: 1136, flexDirection: 'row', justifyContent: 'flex-end' }}>
-            <Text style={{ fontFamily: MONO, fontSize: 14, color: 'rgba(255,255,255,0.45)' }}>06 / 14</Text>
+            <Text style={{ fontFamily: MONO, fontSize: 14, color: 'rgba(255,255,255,0.45)' }}>06 / 15</Text>
         </Box>
 
     </Box>

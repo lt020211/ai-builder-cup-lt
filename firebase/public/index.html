@@ -1,63 +1,61 @@
 <!DOCTYPE html>
-<html lang="zh-CN">
+<html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>训练故障分诊器 · AI Builder Cup 2026</title>
-<meta name="description" content="把训练失败的现场变成带证据链的判断：这是代码的锅，还是该换卡？值班模式下还会自己止损、备好工单并通知人。">
+<title>Training Failure Triage · AI Builder Cup 2026</title>
+<meta name="description" content="Evidence-based triage for training failures, with containment, draft tickets, and operator notifications in a simulated cluster.">
 <link rel="icon" href="data:,">
 <link rel="stylesheet" href="./styles.css">
 </head>
 <body>
 <div class="app">
 
-  <!-- ================================================================ 顶栏
-       这一栏是整页的定位牌：左边是什么，右边是数据从哪来。
-       把「模拟集群 · 构造数据」放在最显眼的位置，是因为这是最容易被误读的一处。 -->
+  <!-- Top bar and simulation provenance. -->
   <header class="topbar">
     <div class="brand">
       <span class="mark">TF</span>
-      <span class="bn">训练故障分诊器</span>
+      <span class="bn">Training Failure Triage</span>
       <span class="bv">Google Cloud AI Builder Cup 2026</span>
     </div>
     <nav class="nav" id="tabs">
-      <button data-tab="case" class="on">单次分诊</button>
-      <button data-tab="patrol">值班 Agent</button>
-      <button data-tab="bench">基准对照</button>
-      <button data-tab="actions">动作库与审批</button>
+      <button data-tab="case" class="on">Case triage</button>
+      <button data-tab="patrol">On-call patrol</button>
+      <button data-tab="bench">Benchmark</button>
+      <button data-tab="actions">Action library and approvals</button>
     </nav>
     <div class="tmeta">
       <span class="srcdot"></span>
-      <span class="src">模拟集群 · Firestore</span>
+      <span class="src">Simulated cluster · Firestore</span>
       <span class="sep"></span>
-      <span class="src" style="color:var(--dim2)">案例为构造数据 · 非生产</span>
+      <span class="src" style="color:var(--dim2)">Synthetic cases · Non-production</span>
     </div>
   </header>
 
   <main>
 
-    <!-- ============================================================ 单次分诊 -->
-    <div class="tab" id="tab-case">
+    <!-- Case triage. -->
+    <div class="tab" id="tab-case" data-state="idle">
 
       <div class="pagehead">
         <div>
-          <h1>单次分诊</h1>
+          <h1>Case triage</h1>
           <p class="lede">
-            把一段训练失败的现场，变成带证据链的根因判断：这是代码的锅，还是该换卡？
-            结论、依据、以及模型到底调了哪些工具，分层摆开，互不覆盖。
+            Determine the cause of a training failure and whether hardware repair is warranted.
+            Review the decision, source evidence, and tool trace.
           </p>
         </div>
       </div>
 
       <section class="panel">
         <div class="ph">
-          <h2>选择案例</h2>
-          <span class="phhint" id="case-status">选一个案例开始</span>
+          <h2>Select a case</h2>
+          <span class="phhint" id="case-status">Select a case to begin</span>
         </div>
         <div class="pb">
           <div class="bar">
             <select id="case-select"></select>
-            <button id="run-case">开始分诊</button>
+            <button id="run-case">Run triage</button>
           </div>
         </div>
       </section>
@@ -67,7 +65,7 @@
 
           <section class="panel">
             <div class="ph">
-              <h2>结论</h2>
+              <h2>Decision</h2>
               <span class="phhint" id="verdict-mode"></span>
             </div>
             <div class="pb"><div class="verdict" id="verdict"></div></div>
@@ -75,21 +73,21 @@
 
           <section class="panel">
             <div class="ph">
-              <h2>证据包</h2>
-              <span class="phhint">只读 · 现场原始信息，未经模型改写</span>
+              <h2>Evidence package</h2>
+              <span class="phhint">Read-only · Original evidence</span>
             </div>
             <div class="pb"><div id="evidence"></div></div>
           </section>
 
           <section class="panel">
             <div class="ph">
-              <h2>AI 的工具调用轨迹</h2>
+              <h2>Tool trace</h2>
               <span class="phhint" id="toolcount"></span>
             </div>
             <div class="pb">
               <div class="hint" style="margin-bottom:10px">
-                所有数字都由这些工具从确定性代码中取出，模型无法凭空生成。
-                每条处置建议都带引用编号（如 <span class="chip ref">T2</span>），可指回产生它的那次调用。
+                Tools return values calculated by deterministic code.
+                Recommendations cite tool references such as <span class="chip ref">T2</span>, linking each recommendation to its source call.
               </div>
               <ul class="tools" id="tools"></ul>
               <div class="hint" id="degradereason" style="display:none;margin-top:12px"></div>
@@ -98,15 +96,15 @@
 
           <section class="panel">
             <div class="ph">
-              <h2>处置清单</h2>
+              <h2>Recommended actions</h2>
               <span class="phhint" id="acts-hint"></span>
             </div>
             <div class="pb">
               <div class="notice" style="margin-bottom:14px">
-                <b>风险等级由动作库决定，不由模型判断。</b>
-                模型只能选用动作（传 <code>action_id</code>），不能声明或修改等级 ——
-                所以它无法把一个高风险动作说成低风险来绕过审批。
-                低风险可批量批准；中风险需逐条批准并勾选影响面；高风险须填变更单号与审批人。
+                <b>The action library assigns risk levels.</b>
+                The model selects actions using <code>action_id</code>, and cannot modify their risk levels.
+                Approval requirements are enforced by code.
+                Low-risk actions support batch approval. Medium-risk actions require individual approval and impact acknowledgement. High-risk actions require a change-ticket number and approver.
               </div>
               <div id="actions"></div>
               <div class="approve-box" id="approval-global"
@@ -116,24 +114,24 @@
 
           <section class="panel">
             <div class="ph">
-              <h2>AI 分诊叙述</h2>
-              <span class="phhint">下面是模型的原话，上面才是可核对的部分</span>
+              <h2>Model explanation</h2>
+              <span class="phhint">Model output · Verify against the evidence above</span>
             </div>
             <div class="pb"><pre class="ai" id="aitext"></pre></div>
           </section>
 
           <section class="panel">
             <div class="ph">
-              <h2>执行包</h2>
+              <h2>Execution package</h2>
               <span class="phhint" id="pkg-hint"></span>
             </div>
             <div class="pb">
               <div class="hint" style="margin-bottom:12px">
-                命令 + 预期输出 + 回滚步骤 + 审批记录。没有回滚方案的动作不会进执行包，
-                未获批准的动作会明确标注「未批准，请勿执行」。
+                Commands, expected output, rollback steps, and approval records. Actions without rollback steps are excluded.
+                Unapproved actions are marked "Not approved; do not execute."
               </div>
               <div class="acts-actions">
-                <button id="export-pkg" class="mini">下载执行包（Markdown）</button>
+                <button id="export-pkg" class="mini">Download execution package (Markdown)</button>
               </div>
             </div>
           </section>
@@ -142,57 +140,53 @@
       </div>
     </div>
 
-    <!-- ============================================================ 值班 -->
-    <div class="tab" id="tab-patrol" hidden>
+    <!-- On-call patrol. -->
+    <div class="tab" id="tab-patrol" data-state="idle" hidden>
 
       <div class="pagehead">
         <div>
-          <h1>值班 Agent</h1>
+          <h1>On-call patrol</h1>
           <p class="lede">
-            没有人贴日志。Agent 自己扫集群、逐节点取证、动手止损，
-            每一步的数字都来自工具返回值，写入之后重新读回验证。
+            Scan the cluster, inspect flagged nodes, and contain issues.
+            Tool results provide evidence, and writes are verified by reading state back.
           </p>
         </div>
         <div class="phact">
-          <button id="run-patrol">开始值班巡检</button>
-          <button id="refresh-cluster" class="ghost">刷新集群状态</button>
-          <button id="reset-cluster" class="ghost">重置模拟集群</button>
-          <!-- ★ 这个 span 不能省：app.js 用 setStatus('#patrol-status', …) 往里写
-               「读取集群… / 巡检中… / 已完成：执行 N 个动作… / 已重置 N 个节点…」，
-               而 setStatus 拿到 null 时是**静默不报错**的。
-               丢了它 → 界面上什么都不显示，但控制台没有任何提示，
-               record_demo.mjs 与 browser_check.mjs 会一直等到超时。
-               落在按钮后面是照 D 稿来的（那一版这个位置是「最近一轮 · 17 次调用 · 41.2s」）。 -->
+          <button id="run-patrol">Run patrol</button>
+          <button id="refresh-cluster" class="ghost">Refresh cluster</button>
+          <button id="reset-cluster" class="ghost">Reset simulated cluster</button>
+          <!-- Required status target for setStatus and browser completion checks. -->
           <span class="phhint" id="patrol-status"></span>
+          <span id="cluster-status" data-state="idle" hidden></span>
         </div>
       </div>
 
       <div class="notice">
-        <b>这里连接的是一个有真实状态的模拟集群（Cloud Firestore）。</b>
-        Agent 的「执行」不是界面动画：它会真的改写节点状态，执行后重新读回来验证，
-        <b>所有动作都写入操作日志</b>。你可以在 Firebase 控制台里刷新
-        <code>cluster</code> 集合，亲眼确认数据变了。集群状态可一键重置回演示起点。
+        <b>The simulated cluster stores persistent state in Cloud Firestore.</b>
+        Actions update node state and verify it by reading back the result.
+        <b>All actions are recorded in the operation log</b>. Inspect the
+        <code>cluster</code> collection in the Firebase console to verify changes. Reset restores the demo state.
         <br><br>
-        <b>关于「主动」：</b>本应用是纯静态站点，没有常驻进程。所以这里的「主动巡检」是由你点一下开始、
-        之后自动跑完的循环。真实部署应由 Cloud Scheduler 之类定时触发 —— 这一点不假装。
+        <b>Patrol trigger:</b> This static site runs patrol when you click Run patrol.
+        The loop then completes automatically. A production deployment would need a scheduler such as Cloud Scheduler.
       </div>
 
-      <!-- 集群概览：数字全部由 refreshCluster() 从这次实际读到的节点算出来 -->
+      <!-- KPIs are calculated from freshly read nodes. -->
       <div class="kpis" id="cluster-kpis"></div>
 
       <section class="panel">
         <div class="ph">
-          <h2>集群状态</h2>
+          <h2>Cluster state</h2>
           <span class="phhint" id="cluster-meta"></span>
         </div>
         <div class="pb tight">
-          <div class="nodes" id="nodes"><div class="hint">读取中…</div></div>
+          <div class="nodes" id="nodes"><div class="hint">Loading…</div></div>
         </div>
       </section>
 
       <section class="panel" id="patrol-report-sec" style="display:none">
         <div class="ph">
-          <h2>值班报告</h2>
+          <h2>Patrol report</h2>
           <span class="phhint" id="patrol-mode"></span>
         </div>
         <div class="pb"><pre class="ai" id="patrol-text"></pre></div>
@@ -200,95 +194,95 @@
 
       <section class="panel">
         <div class="ph">
-          <h2>AI 的工具调用轨迹</h2>
+          <h2>Tool trace</h2>
           <span class="phhint" id="patrol-toolcount"></span>
         </div>
         <div class="pb">
           <div class="hint" style="margin-bottom:10px">
-            值班模式同样要留证据链：它先调 <code>scan_cluster</code> 自己去发现该看哪里，
-            再逐个节点 <code>inspect_node</code> 取证，然后才动手。
-            每一步的数字都来自工具返回值，模型无法凭空生成。
+            Patrol starts with <code>scan_cluster</code> to discover flagged nodes,
+            then uses <code>inspect_node</code> for each node before taking action.
+            Each step uses values from tool results.
           </div>
-          <ul class="tools" id="patrol-tools"><li><span>尚未巡检</span></li></ul>
+          <ul class="tools" id="patrol-tools"><li><span>No patrol run yet</span></li></ul>
         </div>
       </section>
 
       <section class="panel">
         <div class="ph">
-          <h2>操作日志</h2>
+          <h2>Operation log</h2>
           <span class="phhint" id="events-count"></span>
         </div>
         <div class="pb tight">
           <div class="hint" style="margin-bottom:8px">
-            每一条都是真的对集群执行过的动作，含执行后的回验结果。
+            Actions applied to the simulated cluster, including read-back verification.
           </div>
-          <ul class="log" id="events"><li><span class="tx">暂无操作记录</span></li></ul>
+          <ul class="log" id="events"><li><span class="tx">No operations recorded</span></li></ul>
         </div>
       </section>
 
       <section class="panel">
         <div class="ph">
-          <h2>待人工批准</h2>
+          <h2>Pending human approval</h2>
           <span class="phhint" id="tickets-count"></span>
         </div>
         <div class="pb tight">
           <div class="hint" style="margin-bottom:10px">
-            Agent 会把需要人工决策的事备到「只需点确认」的程度，但不会替你提交 ——
-            报修是不可逆的资源决策，按下提交键这件事必须由人来做。
+            Tickets are prepared as drafts for human review.
+            Hardware repair changes resource availability and requires human submission.
           </div>
-          <div class="stack" id="tickets"><div class="hint">暂无待批准事项</div></div>
+          <div class="stack" id="tickets"><div class="hint">No pending approvals</div></div>
         </div>
       </section>
 
       <section class="panel">
         <div class="ph">
-          <h2>通知队列</h2>
+          <h2>Notification queue</h2>
           <span class="phhint" id="notif-count"></span>
         </div>
         <div class="pb tight">
           <div class="hint" style="margin-bottom:10px">
-            Agent 判完之后会主动推给人的内容。真实部署时这里接的是 IM / 邮件系统；
-            演示环境里它落在这条队列上，方便现场核对内容是否准确。
+            Notifications are queued after triage. A production deployment would connect messaging or email.
+            Review queued content here in the demo.
           </div>
-          <div class="stack" id="notifications"><div class="hint">暂无通知</div></div>
+          <div class="stack" id="notifications"><div class="hint">No notifications</div></div>
         </div>
       </section>
     </div>
 
-    <!-- ============================================================ 基准 -->
+    <!-- Benchmark. -->
     <div class="tab" id="tab-bench" hidden>
 
       <div class="pagehead">
         <div>
-          <h1>基准对照</h1>
+          <h1>Benchmark</h1>
           <p class="lede">
-            同一个案例库，跑两条路径，比两个能被当场证伪的字段：故障分类与是否报修。
-            规则路径在本地秒级跑完、不消耗任何模型配额 —— 你可以自己在浏览器里点一遍验证。
+            Compare failure classification and repair decisions against the same case expectations.
+            The rule baseline runs locally without model quota.
           </p>
         </div>
         <div class="phact">
-          <button id="run-bench">跑规则基线（本地，秒出）</button>
-          <button id="run-bench-ai" class="ghost">跑 AI 分诊（消耗配额）</button>
-          <button id="clear-bench" class="ghost">清空 AI 结果</button>
+          <button id="run-bench">Run rule baseline (local)</button>
+          <button id="run-bench-ai" class="ghost">Run AI triage (uses quota)</button>
+          <button id="clear-bench" class="ghost">Clear AI results</button>
         </div>
       </div>
 
       <div class="bench">
         <div class="benchcard rule">
-          <div class="k">纯规则路径（查表，不读趋势、不辨因果链）</div>
-          <div class="v" id="bench-rule">— / —</div>
-          <div class="hint" id="bench-rule-sub">点击上方按钮实测</div>
+          <div class="k">Rule baseline (votes only; no trend or causal analysis)</div>
+          <div class="v" id="bench-rule">- / -</div>
+          <div class="hint" id="bench-rule-sub">Run the baseline to measure results</div>
         </div>
         <div class="benchcard ai">
-          <div class="k">AI 分诊（模型 + 工具 + 知识库）</div>
-          <div class="v" id="bench-ai">— / —</div>
-          <div class="hint" id="bench-ai-sub">逐案例运行后统计，未跑满则为空</div>
+          <div class="k">AI triage (model + tools + knowledge base)</div>
+          <div class="v" id="bench-ai">- / -</div>
+          <div class="hint" id="bench-ai-sub">Results accumulate as cases complete</div>
         </div>
       </div>
 
       <section class="panel">
         <div class="ph">
-          <h2>逐案例对照</h2>
+          <h2>Per-case comparison</h2>
           <span class="phhint" id="bench-status"></span>
         </div>
         <div class="pb">
@@ -297,46 +291,46 @@
       </section>
 
       <section class="panel">
-        <div class="ph"><h2>这个数字是怎么来的</h2></div>
+        <div class="ph"><h2>How scores are calculated</h2></div>
         <div class="pb">
           <div class="hint">
-            规则基线刻意只做最朴素的两步：取预分析投票最高的分类，分类为 hardware 就建议报修。
-            这正是真实世界里的常见做法 —— 看 Xid 码查表。它会错在两类案例上：
-            <b>需要读 30 天趋势的</b>与<b>需要区分次生事件与根因的</b>，
-            这两类恰好是模型能做、规则做不好的。
+            The rule baseline selects the top pre-analysis vote and recommends repair for hardware classifications.
+            This lookup-based approach misses cases requiring
+            <b>30-day trend analysis</b> and <b>separation of secondary events from root causes</b>.
+            The model path can use these additional signals.
             <br><br>
-            数字由 <code>scripts/verify_triage.mjs</code> 与页面上的本地计算共同产出，
-            两者跑的是同一份代码。我们不上报任何跑不出来的成绩 ——
-            如果规则基线是 11/14，页面上写的就一定是 11/14。
+            Scores come from <code>scripts/verify_triage.mjs</code>  and the local page calculation.
+            Both use the same code.
+            If the baseline produces 11/14, the page displays 11/14.
           </div>
         </div>
       </section>
     </div>
 
-    <!-- ============================================================ 动作库 -->
+    <!-- Action library and approvals. -->
     <div class="tab" id="tab-actions" hidden>
 
       <div class="pagehead">
         <div>
-          <h1>动作库与审批</h1>
+          <h1>Action library and approvals</h1>
           <p class="lede">
-            判定看的是爆炸半径，不是难易：装个 wheel 可能很麻烦，但它只影响一个容器，所以是低风险；
-            重启节点只是敲一行命令，但它会杀掉别人跑了一周的任务，所以是中风险。
+            Risk reflects impact. Installing a wheel affects one container and is low risk.
+            Restarting a node interrupts other tasks and is medium risk.
           </p>
         </div>
       </div>
 
       <section class="panel">
         <div class="ph">
-          <h2>三级风险与审批要求</h2>
-          <span class="phhint">颜色只表示等级，不表示难度</span>
+          <h2>Risk levels and approval requirements</h2>
+          <span class="phhint">Colors indicate risk levels</span>
         </div>
         <div class="pb"><div class="grid" id="risk-levels"></div></div>
       </section>
 
       <section class="panel">
         <div class="ph">
-          <h2>修复动作库</h2>
+          <h2>Repair action library</h2>
           <span class="phhint" id="action-count"></span>
         </div>
         <div class="pb">
@@ -346,31 +340,31 @@
 
       <section class="panel">
         <div class="ph">
-          <h2>系统明确不建议的动作</h2>
-          <span class="phhint">保留在库里，但不进给模型的候选清单</span>
+          <h2>Discouraged actions</h2>
+          <span class="phhint">Excluded from model candidates</span>
         </div>
         <div class="pb"><div id="discouraged"></div></div>
       </section>
 
       <section class="panel">
-        <div class="ph"><h2>安全边界（说清楚才可信）</h2></div>
+        <div class="ph"><h2>Safety boundaries</h2></div>
         <div class="pb"><div class="hint" id="boundaries"></div></div>
       </section>
     </div>
 
-    <!-- ======================================================== 运行方式（常驻） -->
+    <!-- Runtime information. -->
     <section class="panel">
-      <div class="ph"><h2>运行方式</h2></div>
+      <div class="ph"><h2>Runtime</h2></div>
       <div class="pb">
         <div class="hint">
-          本页面是纯静态站点，托管于 Firebase Hosting：分诊逻辑在浏览器内运行，
-          Gemini 通过 <b>Firebase AI Logic</b> 直连调用（密钥由平台托管）。
-          值班模式下的集群状态读写走 <b>Cloud Firestore</b>。
-          即使模型不可用，页面也会自动降级为离线规则路径，功能完整可演示。
+          This static site uses Firebase Hosting. Triage logic runs in the browser.
+          Gemini uses <b>Firebase AI Logic</b> with platform-managed API keys.
+          Patrol reads and writes cluster state through <b>Cloud Firestore</b>.
+          When models are unavailable, the site falls back to the limited offline rule path.
           <br><br>
-          本应用<b>不接入任何真实生产集群</b>：分诊用的案例是构造的，值班用的节点是模拟的。
-          真实的腾讯云 / 阿里云 / 百度云 / 智星云集群与 Google Cloud 之间没有网络通路，
-          从架构上也够不着 —— 这一点写在仓库 README 里。
+          This application <b>uses no production clusters</b>. Cases are synthetic and patrol nodes are simulated.
+          Production Tencent Cloud / Alibaba Cloud / Baidu Cloud / Zhixing Cloud clusters have no network connection to Google Cloud.
+          The repository README describes this boundary.
         </div>
       </div>
     </section>

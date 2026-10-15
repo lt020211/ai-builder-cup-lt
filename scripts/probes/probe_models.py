@@ -1,13 +1,7 @@
 #!/usr/bin/env python3
-"""在多个模型上验证「工具调用」是否可用，并测延迟。
+"""Measure tool-call support and latency across models.
 
-为什么需要：网页端一次分析是「模型 → 工具 → 模型」两回合。gemini-3.8-flash 单回合
-要 13s（思考模型），而 -flash-lite 只要 2s。若 lite 也支持工具调用，就该把它设成默认。
-
-用法：
-    python3 scripts/probe_models.py                # 测默认清单
-    python3 scripts/probe_models.py gemini-3.1-flash-lite
-"""
+Usage: python3 scripts/probes/probe_models.py [model ...]"""
 
 from __future__ import annotations
 
@@ -122,14 +116,14 @@ if __name__ == "__main__":
         results.append(r)
         if r.get("calls"):
             names = ", ".join(n for n, _ in r["calls"])
-            print(f"✅ {m:<24} {r['http']} {r['sec']:>5}s  工具调用 {len(r['calls'])} 次: {names}")
+            print(f"{m:<24} {r['http']} {r['sec']:>5}s  tool calls {len(r['calls'])}: {names}")
             for n, a in r["calls"]:
                 print(f"      {n} {json.dumps(a, ensure_ascii=False)}")
         elif r["http"] == 200:
-            print(f"⚠️ {m:<24} 200 {r['sec']:>5}s  无工具调用；finish={r.get('finish')}，"
-                  f"文本={r.get('text')!r}")
+            print(f"Warning: {m:<24} 200 {r['sec']:>5}s  no tool calls; finish={r.get('finish')}, "
+                  f"text={r.get('text')!r}")
         else:
-            print(f"❌ {m:<24} HTTP {r['http']} {r['sec']:>5}s  {str(r.get('error'))[:200]}")
+            print(f"Error: {m:<24} HTTP {r['http']} {r['sec']:>5}s  {str(r.get('error'))[:200]}")
     print()
     print("=" * 78)
     print(json.dumps(results, ensure_ascii=False, indent=2)[:2500])

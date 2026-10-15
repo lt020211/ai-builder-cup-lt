@@ -1,4 +1,4 @@
-// 09 · 风险不从模型来 —— 上部三行风险 + 底部全宽证据条
+// 09: risk levels, execution gate and application evidence.
 const FONT = 'Inter, "Helvetica Neue", Arial, sans-serif';
 const MONO = '"JetBrains Mono", "SF Mono", Menlo, monospace';
 const INK = '#0B1220';
@@ -11,15 +11,15 @@ const DIM = '#64748B';
 const BODY = '#1A2434';
 
 const LEVELS = [
-    { name: 'LOW', count: '6', color: GREEN, rule: 'Task-local, reversible, never touches hardware or the system.', gate: 'the agent may run it itself' },
+    { name: 'LOW', count: '6', color: GREEN, rule: 'Reversible effects limited to a task or scheduling state.', gate: 'eligible for automatic execution' },
     { name: 'MEDIUM', count: '5', color: AMBER, rule: 'Affects other jobs on the same node, or needs a short interruption.', gate: 'per-item approval + impact acknowledgement' },
-    { name: 'HIGH', count: '3', color: RED, rule: 'Irreversible, touches hardware assets, or crosses nodes.', gate: 'approval + change ticket + second confirmation' },
+    { name: 'HIGH', count: '3', color: RED, rule: 'May remove hardware capacity or affect multiple nodes.', gate: 'approval, change ticket and second confirmation' },
 ];
 
 <Slide style={{ width: 1280, height: 720, padding: '18px 72px', background: '#FFFFFF', fontFamily: FONT }}>
     <Box style={{ width: 1136, height: 92, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end' }}>
-        <Text style={{ fontSize: 34, fontWeight: 700, color: INK, lineHeight: 1.3 }}>The model does not set the risk level</Text>
-        <Text style={{ fontFamily: MONO, fontSize: 14, color: DIM, lineHeight: 1.45 }}>14 actions · 6 low / 5 medium / 3 high</Text>
+        <Text style={{ fontSize: 34, fontWeight: 700, color: INK, lineHeight: 1.3 }}>Action risk and approval</Text>
+        <Text style={{ fontFamily: MONO, fontSize: 14, color: DIM, lineHeight: 1.45 }}>14 actions, 6 low / 5 medium / 3 high</Text>
     </Box>
 
     <Box style={{ width: 1136, height: 544 }}>
@@ -38,13 +38,13 @@ const LEVELS = [
                     </Box>
                 ))}
                 <Text style={{ fontSize: 13, color: DIM, lineHeight: 1.6, marginTop: 12, width: 700 }}>
-                    A fifteenth action is registered and deliberately withheld: <span style={{ fontFamily: MONO, color: BODY }}>raise_nccl_timeout</span>.
-                    Raising the timeout would suppress the symptom instead of fixing it, so the knowledge base marks it discouraged.
+                    The catalog also marks <span style={{ fontFamily: MONO, color: BODY }}>raise_nccl_timeout</span> as discouraged.
+                    It hides a timeout symptom without resolving its cause and is excluded from model candidates.
                 </Text>
             </Box>
 
             <Box style={{ width: 404 }}>
-                <Text style={{ fontSize: 18, fontWeight: 600, color: INK, lineHeight: 1.45 }}>The gate is a whitelist, not a prompt rule</Text>
+                <Text style={{ fontSize: 18, fontWeight: 600, color: INK, lineHeight: 1.45 }}>Execution allow-list</Text>
                 <Box style={{ marginTop: 8, padding: 10, borderRadius: 6, background: INK }}>
                     <Text style={{ fontFamily: MONO, fontSize: 13, color: '#E2E8F0', lineHeight: 1.7 }}>
                         if (act.risk !== 'low') {'{'}
@@ -55,27 +55,24 @@ const LEVELS = [
                     </Text>
                 </Box>
                 <Text style={{ fontSize: 14, color: BODY, lineHeight: 1.55, marginTop: 8, width: 404 }}>
-                    The tool schema has no risk field, so the model has no way to call an action low-risk.
+                    The model selects an action ID. The action library supplies its risk level.
                 </Text>
                 <Text style={{ fontSize: 16, fontWeight: 700, color: BLUE, lineHeight: 1.5, marginTop: 8, width: 404 }}>
-                    A refused action is stopped inside the tool.
+                    The tool refuses automatic execution above low risk.
                 </Text>
             </Box>
 
         </Box>
 
         <Box style={{ width: 1136, height: 272, marginTop: 16, alignItems: 'center', justifyContent: 'center' }}>
-            {/* 图片框 1050×272 → 1096×210。三级风险那一块在新界面里是 1152×220
-                （比例 5.24）；旧框比例 3.86 比它更扁，按比例要往下补高 ——
-                补出来的图会把下面「修复动作库」那条面板标题一起框进来。
-                换成贴着本块比例、且略大一点的框：不留残影，字也更大。 */}
+            {/* Include the complete risk panel heading in the measured crop. */}
             <Image src='assets/crop-risks.png' style={{ width: 1096, height: 210, border: '1px solid #E9EDF4' }} />
         </Box>
 
     </Box>
 
     <Box style={{ width: 1136, height: 48, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-        <Text style={{ fontSize: 14, color: DIM }}>The three levels above are the page’s own header, captured as it renders</Text>
-        <Text style={{ fontFamily: MONO, fontSize: 14, color: DIM }}>09 / 14</Text>
+        <Text style={{ fontSize: 14, color: DIM }}>Risk levels and approval requirements from the English application</Text>
+        <Text style={{ fontFamily: MONO, fontSize: 14, color: DIM }}>09 / 15</Text>
     </Box>
 </Slide>

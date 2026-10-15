@@ -1,6 +1,6 @@
 # 演示视频脚本 · 训练故障分诊器（值班 Agent）
 
-**语言：** [🇬🇧 English](demo-script.en.md) ｜ 🇨🇳 中文
+**语言：** [English](demo-script.en.md) ｜ 中文 ｜ [English README](../README.md) ｜ [中文 README](../README.zh-CN.md)
 
 > ⚠️ **先决定口播语言再录屏。** 这是 JAPAC 区域赛，评审未必听得懂中文。
 > 本文件是中文口播版；`demo-script.en.md` 是英文版，两版分镜**逐条对应**。

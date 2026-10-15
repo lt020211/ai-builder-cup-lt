@@ -1,68 +1,94 @@
-// 14 · 结束页 —— 居中金句 + 可重跑的验收脚本
+// 14: implemented evidence tiers and the future non-browser REA option.
 const FONT = 'Inter, "Helvetica Neue", Arial, sans-serif';
 const MONO = '"JetBrains Mono", "SF Mono", Menlo, monospace';
+const INK = '#0B1220';
 const BLUE = '#2F6BFF';
-const DEEP = 'linear-gradient(160deg, #0B1220 0%, #131E33 62%, #0B1220 100%)';
+const PANEL = '#F1F4FA';
+const EDGE = '#C3CFE2';
+const DIM = '#64748B';
+const BODY = '#1A2434';
 
-const GRID_X = [0, 71, 142, 213, 284, 355, 426, 497, 568, 639, 710, 781, 852, 923, 994, 1065, 1136];
-const GRID_Y = [0, 64, 128, 192, 256, 320, 384, 448, 512, 576];
-
-const CHECKS = [
-    { k: 'verify_triage.mjs', v: 'rule baseline and result invariants' },
-    { k: 'verify_pipeline.mjs', v: '81 / 81, fake transport and in-memory cluster' },
-    { k: 'browser_check.mjs', v: '31 / 31, real Chrome against real Firestore' },
+const TIERS = [
+    {
+        no: '1', key: 'snapshot', t: 'Case evidence snapshot', shipped: true,
+        d: 'Constructed telemetry stored with a case for repeatable diagnosis and benchmark scoring.',
+    },
+    {
+        no: '2', key: 'live', t: 'Live read', shipped: true,
+        d: 'Current node state from the simulated Firestore cluster, including action results.',
+    },
+    {
+        no: '3', key: 'artifact', t: 'Local artifact inspection', shipped: false,
+        d: 'Inspection of local files such as binaries or packet captures requires a separate deployment.',
+    },
 ];
 
-<Slide style={{ width: 1280, height: 720, padding: '72px', background: DEEP, fontFamily: FONT }}>
-    <Box style={{ position: 'relative', width: 1136, height: 576 }}>
+<Slide style={{ width: 1280, height: 720, padding: '18px 72px', background: '#FFFFFF', fontFamily: FONT }}>
+    <Box style={{ width: 1136, height: 92, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-end' }}>
+        <Text style={{ fontSize: 34, fontWeight: 700, color: INK, lineHeight: 1.3 }}>Evidence support and REA</Text>
+        <Text style={{ fontFamily: MONO, fontSize: 14, color: DIM, lineHeight: 1.45 }}>3 declared tiers, 2 implemented</Text>
+    </Box>
 
-        <Box style={{ position: 'absolute', left: 0, top: 0, width: 1136, height: 576 }}>
-            <svg width={1136} height={576} viewBox='0 0 1136 576'>
-                {GRID_X.map((x, i) => (
-                    <line key={'gx' + i} x1={x} y1={0} x2={x} y2={576} stroke='rgba(255,255,255,0.045)' strokeWidth={1} />
-                ))}
-                {GRID_Y.map((y, i) => (
-                    <line key={'gy' + i} x1={0} y1={y} x2={1136} y2={y} stroke='rgba(255,255,255,0.045)' strokeWidth={1} />
-                ))}
-            </svg>
+    <Box style={{ width: 1136, height: 544 }}>
+
+        <Box style={{ width: 1136 }}>
+            {TIERS.map((t, i) => (
+                <Box key={i} style={{
+                    width: 1136, height: 92, marginBottom: i < 2 ? 12 : 0,
+                    paddingLeft: 16, paddingRight: 16, borderRadius: 6,
+                    background: t.shipped ? PANEL : '#FFFFFF',
+                    borderLeft: '4px solid ' + (t.shipped ? BLUE : EDGE),
+                    borderTop: t.shipped ? 'none' : '1px dashed ' + EDGE,
+                    borderRight: t.shipped ? 'none' : '1px dashed ' + EDGE,
+                    borderBottom: t.shipped ? 'none' : '1px dashed ' + EDGE,
+                    flexDirection: 'row', alignItems: 'center', gap: 16,
+                }}>
+                    <Text style={{ fontFamily: MONO, fontSize: 14, fontWeight: 700, color: t.shipped ? BLUE : DIM, width: 22, lineHeight: 1.6 }}>{t.no}</Text>
+                    <Text style={{ fontFamily: MONO, fontSize: 15, fontWeight: 700, color: t.shipped ? INK : DIM, width: 116, lineHeight: 1.6 }}>{t.key}</Text>
+                    <Box style={{ flex: 1 }}>
+                        <Text style={{ fontSize: 17, fontWeight: 600, color: t.shipped ? INK : DIM, lineHeight: 1.35 }}>{t.t}</Text>
+                        <Text style={{ fontSize: 13, color: t.shipped ? DIM : '#94A3B8', lineHeight: 1.5, marginTop: 3 }}>{t.d}</Text>
+                    </Box>
+                    <Text style={{ fontFamily: MONO, fontSize: 12, fontWeight: 700, color: t.shipped ? BLUE : DIM, width: 128, textAlign: 'right', lineHeight: 1.6 }}>
+                        {t.shipped ? 'SHIPPED' : 'NO PRODUCER'}
+                    </Text>
+                </Box>
+            ))}
         </Box>
 
-        <Box style={{ position: 'relative', width: 1136, height: 576, alignItems: 'center', justifyContent: 'center', gap: 20 }}>
+        <Box style={{ width: 1136, height: 210, flexDirection: 'row', gap: 32, marginTop: 20 }}>
 
-            <Text style={{ fontFamily: MONO, fontSize: 14, color: BLUE, letterSpacing: 3 }}>AI BUILDER CUP 2026 · JAPAC</Text>
-
-            <Text style={{ fontSize: 52, fontWeight: 600, color: '#FFFFFF', lineHeight: 1.25, textAlign: 'center', width: 1000 }}>
-                Acted on, not just recommended
-            </Text>
-
-            <Text style={{ fontSize: 20, color: '#94A3B8', lineHeight: 1.6, textAlign: 'center', width: 880 }}>
-                The demo run ends with a verdict, an operation log entry, and a read-back that proves the write landed.
-            </Text>
-
-            <Box style={{ width: 96, height: 3, background: 'rgba(255,255,255,0.3)', marginTop: 10, marginBottom: 6 }} />
-
-            <Box style={{ flexDirection: 'row', gap: 34, alignItems: 'flex-start' }}>
-                <Box style={{ gap: 6 }}>
-                    <Text style={{ fontFamily: MONO, fontSize: 13, color: 'rgba(255,255,255,0.5)', lineHeight: 1.5 }}>live demo</Text>
-                    <Text style={{ fontFamily: MONO, fontSize: 15, color: '#FFFFFF', lineHeight: 1.5 }}>gpu-waste-auditor-2026.web.app</Text>
+            <Box style={{ width: 620 }}>
+                <Text style={{ fontSize: 18, fontWeight: 600, color: INK, lineHeight: 1.45 }}>Browser deployment boundary</Text>
+                <Text style={{ fontSize: 14, color: BODY, lineHeight: 1.6, marginTop: 8, width: 620 }}>
+                    The submitted browser build has no local artifact producer.
+                    The artifact tier has implemented set to false. Requests for it raise an error.
+                </Text>
+                <Box style={{ marginTop: 12, padding: 12, borderRadius: 6, background: INK, width: 620 }}>
+                    <Text style={{ fontFamily: MONO, fontSize: 13, color: '#E2E8F0', lineHeight: 1.7 }}>
+                        EVIDENCE_TIERS.artifact.implemented   // false
+                        <br />
+                        evidenceTier('artifact')              // throws
+                    </Text>
                 </Box>
-                <Box style={{ width: 1, height: 74, background: 'rgba(255,255,255,0.16)' }} />
-                <Box style={{ gap: 6 }}>
-                    <Text style={{ fontFamily: MONO, fontSize: 13, color: 'rgba(255,255,255,0.5)', lineHeight: 1.5 }}>rerun the numbers</Text>
-                    {CHECKS.map((c, i) => (
-                        <Text key={i} style={{ fontFamily: MONO, fontSize: 14, color: '#C7D2E0', lineHeight: 1.55 }}>
-                            {c.k}  <span style={{ color: 'rgba(255,255,255,0.5)' }}>{c.v}</span>
-                        </Text>
-                    ))}
-                </Box>
+            </Box>
+
+            <Box style={{ width: 484 }}>
+                <Text style={{ fontSize: 18, fontWeight: 600, color: INK, lineHeight: 1.45 }}>Future non-browser option</Text>
+                <Text style={{ fontSize: 14, color: BODY, lineHeight: 1.6, marginTop: 8, width: 484 }}>
+                    REA is not included in this build. The browser application produces snapshot and live evidence only.
+                </Text>
+                <Text style={{ fontSize: 15, fontWeight: 600, color: BLUE, lineHeight: 1.55, marginTop: 10, width: 484 }}>
+                    A future CLI or server deployment could evaluate rea-agents for local artifact inspection.
+                </Text>
             </Box>
 
         </Box>
 
-        <Box style={{ position: 'absolute', left: 0, bottom: 0, width: 1136, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-            <Text style={{ fontSize: 14, color: 'rgba(255,255,255,0.45)' }}>Training Failure Triage · AI Builder Cup 2026</Text>
-            <Text style={{ fontFamily: MONO, fontSize: 14, color: 'rgba(255,255,255,0.45)' }}>14 / 14</Text>
-        </Box>
+    </Box>
 
+    <Box style={{ width: 1136, height: 48, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
+        <Text style={{ fontSize: 14, color: DIM }}>REA remains a future option for a non-browser deployment</Text>
+        <Text style={{ fontFamily: MONO, fontSize: 14, color: DIM }}>14 / 15</Text>
     </Box>
 </Slide>
