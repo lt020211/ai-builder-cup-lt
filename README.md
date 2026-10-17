@@ -18,7 +18,7 @@ Repository attribution does not establish registration eligibility; the applicat
 
 | Deliverable | Available artifact |
 |---|---|
-| Demo video | [Repository MP4](docs/Training-Failure-Triage-demo.mp4), 2:44, English narration and bilingual subtitles |
+| Demo video | [Repository MP4](docs/Training-Failure-Triage-demo.mp4), 3:24, English narration and bilingual subtitles |
 | Solution deck | [PDF](docs/Training-Failure-Triage-deck.pdf), 15 pages |
 
 Public Google Drive video: [View the published demo](https://drive.google.com/file/d/1TLBOoTTjiNSLVGMKatz1rtORza3oBzMU/view).

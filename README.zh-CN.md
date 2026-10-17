@@ -18,7 +18,7 @@ Google Cloud AI Builder Cup 2026（JAPAC），Sustainability & Social Impact 方
 
 | 提交物 | 可用文件 |
 |---|---|
-| 演示视频 | [仓库 MP4](docs/Training-Failure-Triage-demo.mp4)：2:44，1600×900，15 fps，英语旁白、中英双语字幕，共 21 拍 |
+| 演示视频 | [仓库 MP4](docs/Training-Failure-Triage-demo.mp4)：3:24，1600×900，15 fps，英语旁白、中英双语字幕，正片 21 拍 + 收尾 3 拍 |
 | 方案说明 | [PDF deck](docs/Training-Failure-Triage-deck.pdf)：15 页 |
 
 公开视频：[Google Drive 查看链接](https://drive.google.com/file/d/1TLBOoTTjiNSLVGMKatz1rtORza3oBzMU/view)。权限为“知道链接的任何人可查看”。
@@ -69,7 +69,7 @@ F8 对 14 个构造案例同时核对分类和 `should_rma`。规则基线两项
 | 记录 | 工具调用 | 操作与输出 | 用时 |
 |---|---|---|---|
 | 一次历史线上运行 | 16 次 | 2 次已回验的 cordon，1 份工单草稿，1 条排队通知 | 41.2 秒 |
-| 仓库现有演示视频 | 17 次 | 2 条操作记录，3 条排队通知 | 视频总长 2:44 |
+| 仓库现有演示视频 | 17 次 | 2 条操作记录，3 条排队通知 | 正片总长 2:44（全片 3:24） |
 
 这些数值对应各自的运行记录。工具路径、动作和通知数量可能随模型输出及初始状态变化，视频时长也不等于巡检执行时长。
 
